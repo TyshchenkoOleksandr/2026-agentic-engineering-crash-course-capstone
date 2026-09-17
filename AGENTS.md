@@ -23,7 +23,8 @@ than one file or running anything that is not on the allow-list in `.claude/sett
 ## Definition of done
 
 - `pnpm check` is green; new behaviour has a test next to the code (`*.test.ts` / `*.test.tsx`).
-- Evidence, not claims: report the command you ran and its exit code / test count.
+- User-visible flows (pages, clicks, navigation) also get a Playwright test in `e2e/*.spec.ts`; `pnpm test:e2e` is green (reuses the running `pnpm dev`).
+- Evidence, not claims: report the command you ran and its exit code / test count — for both Vitest and Playwright.
 
 ## Next.js 16 rules that differ from what you may remember
 
