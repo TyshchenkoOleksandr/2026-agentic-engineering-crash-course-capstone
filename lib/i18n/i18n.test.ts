@@ -142,7 +142,7 @@ describe("lib/i18n", () => {
             "shop.count": { uk: "Маєте: {count}", en: "Owned: {count}" },
             "skin.on": { uk: "Увімкнено", en: "On" },
             "skin.off": { uk: "Вимкнено", en: "Off" },
-            "item.soft-shadow.name": { uk: "М'яка тінь", en: "Soft shadow" },
+            "item.soft-shadow.name": { uk: "М’яка тінь", en: "Soft shadow" },
             "item.soft-shadow.description": {
               uk: "Тінь, що глибшає під курсором і при натисканні",
               en: "A shadow that deepens on hover and press",
