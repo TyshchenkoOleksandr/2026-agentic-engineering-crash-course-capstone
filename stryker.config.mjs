@@ -12,8 +12,9 @@ const config = {
   thresholds: { high: 85, low: 70, break: 70 },
   reporters: ["clear-text", "progress", "html"],
   htmlReporter: { fileName: "reports/mutation/index.html" },
-  // Inside node_modules: ignored by ESLint and git, even if a crashed run leaves a sandbox behind.
-  tempDirName: "node_modules/.stryker-tmp",
+  // Not inside node_modules: Vitest treats files there as dependencies, so `related` finds no tests.
+  // Git-ignored and removed after each run; a crashed run may leave it behind — delete it by hand.
+  tempDirName: ".stryker-tmp",
   // Keep the sandbox copy to code: harness dirs contain symlinks Stryker cannot copy.
   ignorePatterns: [
     ".claude", ".agents", ".agent-log", ".githooks", "openspec", "docs", "templates",

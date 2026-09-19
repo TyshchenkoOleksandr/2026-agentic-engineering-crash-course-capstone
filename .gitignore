@@ -60,3 +60,4 @@ next-env.d.ts
 
 # stryker (mutation testing)
 /reports/
+/.stryker-tmp/
