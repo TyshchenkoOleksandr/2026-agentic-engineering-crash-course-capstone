@@ -17,13 +17,17 @@ than one file or running anything that is not on the allow-list in `.claude/sett
 
 - `pnpm dev` — dev server (Turbopack, http://localhost:3000). Never start a second one.
 - `pnpm check` — typecheck + lint + tests. Run it before saying a task is done and quote the output.
+- `pnpm test:mutation` — Stryker mutation testing of `lib/` (slow, not in `pnpm check`); fails below 70% mutation score. Report: `reports/mutation/index.html`.
 - `pnpm typecheck` = `next typegen && tsc --noEmit` · `pnpm lint` = `eslint` (`next lint` no longer exists) · `pnpm test` = `vitest run`
 - `pnpm agent:log` — summary of `.agent-log/actions.jsonl`: what you actually did this session.
+- `pnpm agent:loop <change>` — green phase of an OpenSpec change: runs `claude -p` until `pnpm check` + `pnpm test:e2e` are green (max 5, stops on no progress). Needs the `test(<change>):` red commit; never commits. Log: `.agent-log/loops/`. With `.githooks` enabled (`git config core.hooksPath .githooks`, a human step) it starts automatically in the background after a red commit; skip once with `AGENT_LOOP=off`.
 
 ## Definition of done
 
 - `pnpm check` is green; new behaviour has a test next to the code (`*.test.ts` / `*.test.tsx`).
+- Changes to `lib/` keep `pnpm test:mutation` at ≥ 70% (break threshold in `stryker.config.mjs`); surviving mutants are fixed with new tests (never by editing locked red tests), or explained in the PR.
 - User-visible flows (pages, clicks, navigation) also get a Playwright test in `e2e/*.spec.ts`; `pnpm test:e2e` is green (reuses the running `pnpm dev`).
+- OpenSpec changes go red → green: first commit `test(<change>): add failing tests` (Vitest + Playwright + stubs), then `pnpm agent:loop <change>` until green, then `feat(<change>): ...`. Tests from the red commit are locked — `pnpm tests:locked` (inside `pnpm check`) fails if they change. Rules live in `openspec/config.yaml`.
 - Evidence, not claims: report the command you ran and its exit code / test count — for both Vitest and Playwright.
 
 ## Next.js 16 rules that differ from what you may remember
