@@ -4,6 +4,7 @@ import {
   CURRENT_SAVE_VERSION,
   loadGame,
   migrateSave,
+  migrateV1ToV2,
   MIGRATIONS,
   parseSave,
   SAVE_BACKUP_KEY,
@@ -12,10 +13,11 @@ import {
   serializeGame,
   validateGameState,
 } from "./save";
-import type { KeyValueStorage, MigrationTable, ParseSaveOptions } from "./types";
+import type { GameState, KeyValueStorage, MigrationTable, ParseSaveOptions } from "./types";
 
 // ---------------------------------------------------------------------------
-// Fakes
+// Fakes and notation (openspec/changes/add-shop-v1/design.md: FRESH, S({...}), V2(...);
+// specs/game-persistence: RAW_V1(b, t))
 // ---------------------------------------------------------------------------
 
 interface FakeStorage extends KeyValueStorage {
@@ -40,9 +42,7 @@ function createMemoryStorage(initial: Record<string, string> = {}): FakeStorage 
   };
 }
 
-function createThrowingStorage(
-  overrides: Partial<KeyValueStorage> = {},
-): KeyValueStorage {
+function createThrowingStorage(overrides: Partial<KeyValueStorage> = {}): KeyValueStorage {
   return {
     getItem: () => null,
     setItem: () => undefined,
@@ -51,45 +51,74 @@ function createThrowingStorage(
   };
 }
 
-const FRESH = { balance: 0, totalClicks: 0 };
+function fresh(): GameState {
+  return {
+    balance: 0,
+    totalClicks: 0,
+    ownedSkins: [],
+    enabledSkins: [],
+    material: "classic",
+    decor: [],
+    upgrades: [],
+    helpers: { monkey: 0 },
+  };
+}
+
+const FRESH: GameState = fresh();
+
+function S(overrides: Partial<GameState> = {}): GameState {
+  return { ...fresh(), ...overrides };
+}
+
+function V2(state: GameState): string {
+  return JSON.stringify({ version: 2, state });
+}
+
+function RAW_V1(balance: number, totalClicks: number): string {
+  return `{"version":1,"state":{"balance":${balance},"totalClicks":${totalClicks}}}`;
+}
+
 const addBonus: MigrationTable = {
   1: (s) => ({ ...(s as Record<string, unknown>), bonus: 0 }),
 };
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-describe("game-persistence: constants", () => {
-  it("storage keys and current version", () => {
-    expect(SAVE_KEY).toBe("dopamine-clicker:save");
-    expect(SAVE_BACKUP_KEY).toBe("dopamine-clicker:save:bad");
-    expect(CURRENT_SAVE_VERSION).toBe(1);
-  });
-
-  it("built-in migration table is empty in Stage 1", () => {
-    expect(Object.keys(MIGRATIONS)).toEqual([]);
-  });
-});
 
 // ---------------------------------------------------------------------------
 // Versioned save format
 // ---------------------------------------------------------------------------
 
 describe("game-persistence: Versioned save format", () => {
+  it("Constants", () => {
+    expect(SAVE_KEY).toBe("dopamine-clicker:save");
+    expect(SAVE_BACKUP_KEY).toBe("dopamine-clicker:save:bad");
+    expect(CURRENT_SAVE_VERSION).toBe(2);
+  });
+
   it("Serialize state", () => {
-    expect(JSON.parse(serializeGame({ balance: 12, totalClicks: 30 }))).toEqual({
-      version: 1,
-      state: { balance: 12, totalClicks: 30 },
+    expect(JSON.parse(serializeGame(S({ balance: 12, totalClicks: 30 })))).toStrictEqual({
+      version: 2,
+      state: S({ balance: 12, totalClicks: 30 }),
+    });
+  });
+
+  it("Serialize writes only schema fields", () => {
+    const fields: Partial<GameState> = {
+      balance: 1,
+      totalClicks: 1,
+      decor: [{ id: "lava-lamp", position: { x: 0.5, y: 0.25 } }],
+    };
+    const withRuntime = { ...S(fields), carry: 400, savedAt: 123 } as unknown as GameState;
+    expect(JSON.parse(serializeGame(withRuntime))).toStrictEqual({
+      version: 2,
+      state: S(fields),
     });
   });
 
   it("Save writes to the save key", () => {
     const storage = createMemoryStorage();
-    expect(saveGame(storage, { balance: 5, totalClicks: 5 })).toBe(true);
-    expect(JSON.parse(storage.getItem("dopamine-clicker:save") as string)).toEqual({
-      version: 1,
-      state: { balance: 5, totalClicks: 5 },
+    expect(saveGame(storage, S({ balance: 5, totalClicks: 5 }))).toBe(true);
+    expect(JSON.parse(storage.getItem("dopamine-clicker:save") as string)).toStrictEqual({
+      version: 2,
+      state: S({ balance: 5, totalClicks: 5 }),
     });
     expect([...storage.data.keys()]).toEqual(["dopamine-clicker:save"]);
     expect(new Set(storage.writtenKeys)).toEqual(new Set(["dopamine-clicker:save"]));
@@ -103,18 +132,29 @@ describe("game-persistence: Versioned save format", () => {
     });
     let result: boolean | undefined;
     expect(() => {
-      result = saveGame(storage, { balance: 1, totalClicks: 1 });
+      result = saveGame(storage, S({ balance: 1, totalClicks: 1 }));
     }).not.toThrow();
     expect(result).toBe(false);
   });
 
   it("Round trip", () => {
-    const storage = createMemoryStorage();
-    saveGame(storage, { balance: 1234, totalClicks: 2000 });
-    expect(loadGame(storage)).toEqual({
-      state: { balance: 1234, totalClicks: 2000 },
-      status: "loaded",
+    const F = S({
+      balance: 1234,
+      totalClicks: 2000,
+      ownedSkins: ["soft-shadow", "squish", "floating-number", "jumping-cap", "gold"],
+      enabledSkins: ["squish", "jumping-cap"],
+      material: "gold",
+      decor: [
+        { id: "sleeping-cat", position: { x: 0.125, y: 0.5 } },
+        { id: "lava-lamp", position: null },
+        { id: "hydraulic-press", position: { x: 0.75, y: 0.0625 } },
+      ],
+      upgrades: ["double-click", "triple-click"],
+      helpers: { monkey: 7 },
     });
+    const storage = createMemoryStorage();
+    saveGame(storage, F);
+    expect(loadGame(storage)).toStrictEqual({ state: F, status: "loaded" });
   });
 });
 
@@ -124,16 +164,48 @@ describe("game-persistence: Versioned save format", () => {
 
 describe("game-persistence: State validation", () => {
   it("Valid state accepted", () => {
-    expect(validateGameState({ balance: 0, totalClicks: 0 })).toEqual({
-      balance: 0,
-      totalClicks: 0,
-    });
+    expect(validateGameState(FRESH)).toStrictEqual(FRESH);
   });
 
   it("Extra fields dropped", () => {
-    const result = validateGameState({ balance: 2, totalClicks: 3, extra: "x" });
-    expect(result).toStrictEqual({ balance: 2, totalClicks: 3 });
+    const result = validateGameState({ ...S({ balance: 2, totalClicks: 3 }), extra: "x" });
+    expect(result).toStrictEqual(S({ balance: 2, totalClicks: 3 }));
     expect(result).not.toHaveProperty("extra");
+  });
+
+  it("Normalization", () => {
+    const input = {
+      ...S({ totalClicks: 300 }),
+      ownedSkins: ["gold", "jumping-cap", "soft-shadow"],
+      enabledSkins: ["jumping-cap", "soft-shadow"],
+      material: "gold",
+      decor: [
+        { id: "lava-lamp", position: { x: 0.5, y: 0.5, z: 1 } },
+        { id: "sleeping-cat", position: null, hidden: true },
+      ],
+      upgrades: ["triple-click", "double-click"],
+      helpers: { monkey: 2, robot: 5 },
+      extra: "x",
+    };
+    expect(validateGameState(input)).toStrictEqual(
+      S({
+        totalClicks: 300,
+        ownedSkins: ["soft-shadow", "jumping-cap", "gold"],
+        enabledSkins: ["soft-shadow", "jumping-cap"],
+        material: "gold",
+        decor: [
+          { id: "sleeping-cat", position: null },
+          { id: "lava-lamp", position: { x: 0.5, y: 0.5 } },
+        ],
+        upgrades: ["double-click", "triple-click"],
+        helpers: { monkey: 2 },
+      }),
+    );
+  });
+
+  it("Position bounds are inclusive", () => {
+    const input = S({ decor: [{ id: "lava-lamp", position: { x: 0, y: 1 } }] });
+    expect(validateGameState(input)).toStrictEqual(input);
   });
 
   it.each([
@@ -142,16 +214,57 @@ describe("game-persistence: State validation", () => {
     ['"text"', "text"],
     ["[]", []],
     ["{}", {}],
-    ["{ balance: 1 }", { balance: 1 }],
-    ["{ totalClicks: 1 }", { totalClicks: 1 }],
-    ["negative balance", { balance: -1, totalClicks: 0 }],
-    ["negative totalClicks", { balance: 0, totalClicks: -1 }],
-    ["fractional balance", { balance: 1.5, totalClicks: 2 }],
-    ["string balance", { balance: "5", totalClicks: 5 }],
-    ["NaN balance", { balance: NaN, totalClicks: 0 }],
-    ["Infinity balance", { balance: Infinity, totalClicks: 0 }],
-    ["unsafe integer totalClicks", { balance: 0, totalClicks: 9007199254740992 }],
+    ["v1 payload", { balance: 0, totalClicks: 0 }],
+    ["balance undefined", { ...FRESH, balance: undefined }],
+    ["totalClicks undefined", { ...FRESH, totalClicks: undefined }],
+    ["negative balance", { ...FRESH, balance: -1 }],
+    ["negative totalClicks", { ...FRESH, totalClicks: -1 }],
+    ["fractional balance", { ...FRESH, balance: 1.5 }],
+    ["string balance", { ...FRESH, balance: "5" }],
+    ["NaN balance", { ...FRESH, balance: NaN }],
+    ["Infinity balance", { ...FRESH, balance: Infinity }],
+    ["unsafe integer totalClicks", { ...FRESH, totalClicks: 9007199254740992 }],
   ])("Invalid states rejected: %s", (_label, value) => {
+    expect(validateGameState(value)).toBeNull();
+  });
+
+  it.each([
+    ["ownedSkins not an array", { ...FRESH, ownedSkins: "soft-shadow" }],
+    ["unknown skin", { ...FRESH, ownedSkins: ["ripple"] }],
+    ["duplicate skin", { ...FRESH, ownedSkins: ["squish", "squish"] }],
+    ["enabled but not owned", { ...FRESH, enabledSkins: ["squish"] }],
+    ["gold in enabledSkins", { ...FRESH, ownedSkins: ["gold"], enabledSkins: ["gold"] }],
+    ["gold material without gold", { ...FRESH, material: "gold" }],
+    ["unknown material", { ...FRESH, material: "lava" }],
+    ["material undefined", { ...FRESH, material: undefined }],
+    ["decor not an array", { ...FRESH, decor: {} }],
+    ["decor entry is a string", { ...FRESH, decor: ["lava-lamp"] }],
+    ["unknown decor", { ...FRESH, decor: [{ id: "dvd-logo", position: null }] }],
+    [
+      "duplicate decor",
+      {
+        ...FRESH,
+        decor: [
+          { id: "lava-lamp", position: null },
+          { id: "lava-lamp", position: null },
+        ],
+      },
+    ],
+    ["decor without position", { ...FRESH, decor: [{ id: "lava-lamp" }] }],
+    ["position without y", { ...FRESH, decor: [{ id: "lava-lamp", position: { x: 0.5 } }] }],
+    ["x above 1", { ...FRESH, decor: [{ id: "lava-lamp", position: { x: 1.5, y: 0 } }] }],
+    ["x below 0", { ...FRESH, decor: [{ id: "lava-lamp", position: { x: -0.1, y: 0 } }] }],
+    ["x NaN", { ...FRESH, decor: [{ id: "lava-lamp", position: { x: NaN, y: 0 } }] }],
+    ["x string", { ...FRESH, decor: [{ id: "lava-lamp", position: { x: "0.5", y: 0 } }] }],
+    ["triple without double", { ...FRESH, upgrades: ["triple-click"] }],
+    ["unknown upgrade", { ...FRESH, upgrades: ["crit"] }],
+    ["duplicate upgrade", { ...FRESH, upgrades: ["double-click", "double-click"] }],
+    ["helpers null", { ...FRESH, helpers: null }],
+    ["helpers array", { ...FRESH, helpers: [] }],
+    ["helpers empty", { ...FRESH, helpers: {} }],
+    ["negative monkeys", { ...FRESH, helpers: { monkey: -1 } }],
+    ["fractional monkeys", { ...FRESH, helpers: { monkey: 1.5 } }],
+  ])("Invalid shop fields rejected: %s", (_label, value) => {
     expect(validateGameState(value)).toBeNull();
   });
 });
@@ -162,7 +275,7 @@ describe("game-persistence: State validation", () => {
 
 describe("game-persistence: Loading with fallback", () => {
   it("Nothing stored", () => {
-    expect(loadGame(createMemoryStorage())).toEqual({ state: FRESH, status: "fresh" });
+    expect(loadGame(createMemoryStorage())).toStrictEqual({ state: FRESH, status: "fresh" });
   });
 
   it("Storage read throws", () => {
@@ -175,7 +288,7 @@ describe("game-persistence: Loading with fallback", () => {
     expect(() => {
       result = loadGame(storage);
     }).not.toThrow();
-    expect(result).toEqual({ state: FRESH, status: "fresh" });
+    expect(result).toStrictEqual({ state: FRESH, status: "fresh" });
   });
 
   it.each([
@@ -189,26 +302,30 @@ describe("game-persistence: Loading with fallback", () => {
     '{"state":{"balance":1,"totalClicks":1}}',
     '{"version":"1","state":{"balance":1,"totalClicks":1}}',
     '{"version":1,"state":{"balance":-5,"totalClicks":1}}',
+    '{"version":2,"state":{"balance":10,"totalClicks":10}}',
   ])("Corrupted raw values: %j", (raw) => {
-    expect(parseSave(raw)).toEqual({ state: FRESH, status: "corrupted" });
+    expect(parseSave(raw)).toStrictEqual({ state: FRESH, status: "corrupted" });
   });
 
   it("Null raw value is fresh, not corrupted", () => {
-    expect(parseSave(null)).toEqual({ state: FRESH, status: "fresh" });
+    expect(parseSave(null)).toStrictEqual({ state: FRESH, status: "fresh" });
   });
 
   it("Future version falls back", () => {
-    expect(parseSave('{"version":2,"state":{"balance":10,"totalClicks":10}}')).toEqual({
+    const raw = JSON.stringify({ version: 3, state: S({ balance: 10, totalClicks: 10 }) });
+    expect(parseSave(raw)).toStrictEqual({ state: FRESH, status: "corrupted" });
+  });
+
+  it("Version 0 falls back", () => {
+    expect(parseSave('{"version":0,"state":{"balance":10,"totalClicks":10}}')).toStrictEqual({
       state: FRESH,
       status: "corrupted",
     });
   });
 
-  it("Version 0 falls back", () => {
-    expect(parseSave('{"version":0,"state":{"balance":10,"totalClicks":10}}')).toEqual({
-      state: FRESH,
-      status: "corrupted",
-    });
+  it("Current version loads", () => {
+    const state = S({ balance: 4, totalClicks: 20, upgrades: ["double-click"] });
+    expect(parseSave(V2(state))).toStrictEqual({ state, status: "loaded" });
   });
 
   it("Loading does not read or change theme and language keys", () => {
@@ -230,28 +347,26 @@ describe("game-persistence: Loading with fallback", () => {
 describe("game-persistence: Corrupted-save backup", () => {
   it("Invalid JSON is backed up", () => {
     const storage = createMemoryStorage({ "dopamine-clicker:save": "{not json" });
-    expect(loadGame(storage)).toEqual({ state: FRESH, status: "corrupted" });
+    expect(loadGame(storage)).toStrictEqual({ state: FRESH, status: "corrupted" });
     expect(storage.getItem("dopamine-clicker:save:bad")).toBe("{not json");
     expect(storage.getItem("dopamine-clicker:save")).toBe("{not json");
   });
 
   it("Failed validation is backed up", () => {
-    const raw = '{"version":1,"state":{"balance":-5,"totalClicks":1}}';
-    const storage = createMemoryStorage({ "dopamine-clicker:save": raw });
+    const storage = createMemoryStorage({ "dopamine-clicker:save": RAW_V1(-5, 1) });
     expect(loadGame(storage).status).toBe("corrupted");
-    expect(storage.getItem("dopamine-clicker:save:bad")).toBe(raw);
+    expect(storage.getItem("dopamine-clicker:save:bad")).toBe(RAW_V1(-5, 1));
   });
 
   it("Future version is backed up", () => {
-    const raw = '{"version":2,"state":{"balance":10,"totalClicks":10}}';
+    const raw = '{"version":3,"state":{"balance":10,"totalClicks":10}}';
     const storage = createMemoryStorage({ "dopamine-clicker:save": raw });
     expect(loadGame(storage).status).toBe("corrupted");
     expect(storage.getItem("dopamine-clicker:save:bad")).toBe(raw);
   });
 
   it("Failed migration is backed up", () => {
-    const raw = '{"version":1,"state":{"balance":8,"totalClicks":9}}';
-    const storage = createMemoryStorage({ "dopamine-clicker:save": raw });
+    const storage = createMemoryStorage({ "dopamine-clicker:save": RAW_V1(8, 9) });
     const options: ParseSaveOptions = {
       migrations: {
         1: () => {
@@ -260,8 +375,8 @@ describe("game-persistence: Corrupted-save backup", () => {
       },
       targetVersion: 2,
     };
-    expect(loadGame(storage, options)).toEqual({ state: FRESH, status: "corrupted" });
-    expect(storage.getItem("dopamine-clicker:save:bad")).toBe(raw);
+    expect(loadGame(storage, options)).toStrictEqual({ state: FRESH, status: "corrupted" });
+    expect(storage.getItem("dopamine-clicker:save:bad")).toBe(RAW_V1(8, 9));
   });
 
   it("New backup overwrites the previous one", () => {
@@ -274,13 +389,14 @@ describe("game-persistence: Corrupted-save backup", () => {
   });
 
   it("No backup for fresh, loaded or migrated", () => {
-    const raw = '{"version":1,"state":{"balance":3,"totalClicks":3}}';
     const a = createMemoryStorage();
-    const b = createMemoryStorage({ "dopamine-clicker:save": raw });
-    const c = createMemoryStorage({ "dopamine-clicker:save": raw });
-    expect(loadGame(a).status).toBe("fresh");
-    expect(loadGame(b).status).toBe("loaded");
-    expect(loadGame(c, { migrations: addBonus, targetVersion: 2 }).status).toBe("migrated");
+    const b = createMemoryStorage({ "dopamine-clicker:save": V2(S({ balance: 3, totalClicks: 3 })) });
+    const c = createMemoryStorage({ "dopamine-clicker:save": RAW_V1(3, 3) });
+    expect([loadGame(a).status, loadGame(b).status, loadGame(c).status]).toEqual([
+      "fresh",
+      "loaded",
+      "migrated",
+    ]);
     expect(a.getItem("dopamine-clicker:save:bad")).toBeNull();
     expect(b.getItem("dopamine-clicker:save:bad")).toBeNull();
     expect(c.getItem("dopamine-clicker:save:bad")).toBeNull();
@@ -289,7 +405,7 @@ describe("game-persistence: Corrupted-save backup", () => {
   it("Existing backup untouched by a valid load", () => {
     const storage = createMemoryStorage({
       "dopamine-clicker:save:bad": "old",
-      "dopamine-clicker:save": '{"version":1,"state":{"balance":3,"totalClicks":3}}',
+      "dopamine-clicker:save": V2(S({ balance: 3, totalClicks: 3 })),
     });
     expect(loadGame(storage).status).toBe("loaded");
     expect(storage.getItem("dopamine-clicker:save:bad")).toBe("old");
@@ -306,11 +422,11 @@ describe("game-persistence: Corrupted-save backup", () => {
     expect(() => {
       result = loadGame(storage);
     }).not.toThrow();
-    expect(result).toEqual({ state: FRESH, status: "corrupted" });
+    expect(result).toStrictEqual({ state: FRESH, status: "corrupted" });
   });
 
   it("Parsing a raw string never writes storage", () => {
-    expect(parseSave("{not json")).toEqual({ state: FRESH, status: "corrupted" });
+    expect(parseSave("{not json")).toStrictEqual({ state: FRESH, status: "corrupted" });
   });
 });
 
@@ -319,6 +435,11 @@ describe("game-persistence: Corrupted-save backup", () => {
 // ---------------------------------------------------------------------------
 
 describe("game-persistence: Migration hook", () => {
+  it("Built-in table", () => {
+    expect(Object.keys(MIGRATIONS)).toEqual(["1"]);
+    expect(MIGRATIONS[1]).toBe(migrateV1ToV2);
+  });
+
   it("Same version passes through unchanged", () => {
     expect(migrateSave({ version: 1, state: { balance: 3, totalClicks: 4 } }, {}, 1)).toEqual({
       version: 1,
@@ -370,21 +491,67 @@ describe("game-persistence: Migration hook", () => {
   });
 
   it("Migrated load reports status migrated", () => {
-    expect(
-      parseSave('{"version":1,"state":{"balance":8,"totalClicks":9}}', {
-        migrations: addBonus,
-        targetVersion: 2,
-      }),
-    ).toEqual({ state: { balance: 8, totalClicks: 9 }, status: "migrated" });
+    expect(parseSave(RAW_V1(8, 9))).toStrictEqual({
+      state: S({ balance: 8, totalClicks: 9 }),
+      status: "migrated",
+    });
   });
 
   it("Migrated state that fails validation is corrupted", () => {
     expect(
-      parseSave('{"version":1,"state":{"balance":8,"totalClicks":9}}', {
+      parseSave(RAW_V1(8, 9), {
         migrations: { 1: () => ({ balance: -1, totalClicks: 0 }) },
         targetVersion: 2,
       }),
-    ).toEqual({ state: FRESH, status: "corrupted" });
+    ).toStrictEqual({ state: FRESH, status: "corrupted" });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Stage 1 saves migrate to v2
+// ---------------------------------------------------------------------------
+
+describe("game-persistence: Stage 1 saves migrate to v2", () => {
+  it("Migrate a v1 payload", () => {
+    expect(migrateV1ToV2({ balance: 7, totalClicks: 9 })).toStrictEqual(
+      S({ balance: 7, totalClicks: 9 }),
+    );
+  });
+
+  it("Extra v1 keys are dropped", () => {
+    const result = migrateV1ToV2({ balance: 1, totalClicks: 2, foo: 3 });
+    expect(result).toStrictEqual(S({ balance: 1, totalClicks: 2 }));
+    expect(result).not.toHaveProperty("foo");
+  });
+
+  it("Values are passed through for later validation", () => {
+    expect(migrateV1ToV2({ balance: -5, totalClicks: 1 })).toStrictEqual({
+      ...FRESH,
+      balance: -5,
+      totalClicks: 1,
+    });
+  });
+
+  it("Non-object payloads are returned unchanged", () => {
+    const A = [1];
+    expect(migrateV1ToV2(null)).toBeNull();
+    expect(migrateV1ToV2(42)).toBe(42);
+    expect(migrateV1ToV2("x")).toBe("x");
+    expect(migrateV1ToV2(A)).toBe(A);
+    expect(parseSave('{"version":1,"state":null}')).toStrictEqual({
+      state: FRESH,
+      status: "corrupted",
+    });
+  });
+
+  it("Loading a v1 save does not rewrite it", () => {
+    const storage = createMemoryStorage({ "dopamine-clicker:save": RAW_V1(40, 12) });
+    expect(loadGame(storage)).toStrictEqual({
+      state: S({ balance: 40, totalClicks: 12 }),
+      status: "migrated",
+    });
+    expect(storage.getItem("dopamine-clicker:save")).toBe(RAW_V1(40, 12));
+    expect(storage.getItem("dopamine-clicker:save:bad")).toBeNull();
   });
 });
 
@@ -395,7 +562,7 @@ describe("game-persistence: Migration hook", () => {
 describe("game-persistence: Reset progress with confirmation", () => {
   it("Clear removes only the save key", () => {
     const storage = createMemoryStorage({
-      "dopamine-clicker:save": '{"version":1,"state":{"balance":5,"totalClicks":5}}',
+      "dopamine-clicker:save": V2(S({ balance: 3, totalClicks: 3 })),
       "dopamine-clicker:save:bad": "{not json",
       "dopamine-clicker:theme": "dark",
       "dopamine-clicker:lang": "en",

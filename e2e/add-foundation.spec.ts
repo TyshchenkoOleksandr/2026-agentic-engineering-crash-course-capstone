@@ -122,8 +122,17 @@ test.describe("game-persistence", () => {
 
     const rawSave = await getLocalStorageItem(page, SAVE_KEY);
     expect(rawSave ? JSON.parse(rawSave) : null).toEqual({
-      version: 1,
-      state: { balance: 1, totalClicks: 1 },
+      version: 2,
+      state: {
+        balance: 1,
+        totalClicks: 1,
+        ownedSkins: [],
+        enabledSkins: [],
+        material: "classic",
+        decor: [],
+        upgrades: [],
+        helpers: { monkey: 0 },
+      },
     });
     expect(await getLocalStorageItem(page, SAVE_BACKUP_KEY)).toBe("{not json");
   });
@@ -139,8 +148,17 @@ test.describe("game-persistence", () => {
 
     const rawSave = await getLocalStorageItem(page, SAVE_KEY);
     expect(rawSave ? JSON.parse(rawSave) : null).toEqual({
-      version: 1,
-      state: { balance: 5, totalClicks: 5 },
+      version: 2,
+      state: {
+        balance: 5,
+        totalClicks: 5,
+        ownedSkins: [],
+        enabledSkins: [],
+        material: "classic",
+        decor: [],
+        upgrades: [],
+        helpers: { monkey: 0 },
+      },
     });
   });
 

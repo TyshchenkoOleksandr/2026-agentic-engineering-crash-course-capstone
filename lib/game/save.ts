@@ -6,6 +6,7 @@ import type {
   LoadGame,
   LoadStatus,
   MigrateSave,
+  MigrateV1ToV2,
   MigrationTable,
   ParseSave,
   SaveBackupKey,
@@ -18,9 +19,15 @@ import type {
 
 export const SAVE_KEY: SaveKey = "dopamine-clicker:save";
 export const SAVE_BACKUP_KEY: SaveBackupKey = "dopamine-clicker:save:bad";
-export const CURRENT_SAVE_VERSION: CurrentSaveVersion = 1;
-/** Built-in migration table, keyed by source version. Empty in Stage 1. */
-export const MIGRATIONS: MigrationTable = Object.freeze({});
+export const CURRENT_SAVE_VERSION: CurrentSaveVersion = 2;
+
+/** Built-in MIGRATIONS[1]: v1 payload -> v2 payload with default shop fields (design, Migration Plan). */
+export const migrateV1ToV2: MigrateV1ToV2 = () => {
+  throw new Error("not implemented");
+};
+
+/** Built-in migration table, keyed by source version. */
+export const MIGRATIONS: MigrationTable = Object.freeze({ 1: migrateV1ToV2 });
 
 export const serializeGame: SerializeGame = (state) =>
   JSON.stringify({
@@ -28,20 +35,9 @@ export const serializeGame: SerializeGame = (state) =>
     state: { balance: state.balance, totalClicks: state.totalClicks },
   });
 
-/** Non-negative safe integer — rejects NaN, Infinity, fractions and non-numbers. */
-function isCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
-
-export const validateGameState: ValidateGameState = (value) => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return null;
-  }
-  const { balance, totalClicks } = value as Record<string, unknown>;
-  if (!isCount(balance) || !isCount(totalClicks)) {
-    return null;
-  }
-  return { balance, totalClicks };
+/** v2 validator with normalization (design D13). */
+export const validateGameState: ValidateGameState = () => {
+  throw new Error("not implemented");
 };
 
 export const migrateSave: MigrateSave = (file, migrations, targetVersion) => {
