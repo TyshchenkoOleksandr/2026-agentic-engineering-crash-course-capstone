@@ -1,6 +1,9 @@
+import { tickHelpers } from "@/lib/game/helpers";
 import { clearGame, loadGame, saveGame } from "@/lib/game/save";
+import { buyItem } from "@/lib/game/shop";
+import { toggleSkin } from "@/lib/game/skins";
 import { createInitialState } from "@/lib/game/state";
-import type { GameState } from "@/lib/game/types";
+import type { BuyOptions, GameState, ShopItemId, SkinId } from "@/lib/game/types";
 
 // The saved game seen as an external store (mirrors components/preferences-store.ts): React reads
 // it through useSyncExternalStore instead of copying it into local state. `null` until the browser
@@ -45,5 +48,46 @@ export function commitGame(next: GameState): void {
 export function resetGame(): void {
   clearGame(window.localStorage);
   snapshot = createInitialState();
+  carry = 0;
   emit();
+}
+
+// Fractional helper income in milli-clicks. It lives only here, never in the save (design D11).
+let carry = 0;
+
+/** Buys one unit of `id`; a refused purchase leaves the state (and the save) untouched. */
+export function buy(id: ShopItemId, options?: BuyOptions): void {
+  const state = getSavedStateSnapshot();
+  if (!state) {
+    return;
+  }
+  const result = buyItem(state, id, options);
+  if (result.ok) {
+    commitGame(result.state);
+  }
+}
+
+/** Toggles an owned skin; skins that are not owned are a no-op down in `toggleSkin`. */
+export function toggle(id: SkinId): void {
+  const state = getSavedStateSnapshot();
+  if (!state) {
+    return;
+  }
+  const next = toggleSkin(state, id);
+  if (next !== state) {
+    commitGame(next);
+  }
+}
+
+/** One game tick: only ticks that complete a whole helper click write to storage (design D11). */
+export function tick(elapsedMs: number): void {
+  const state = getSavedStateSnapshot();
+  if (!state) {
+    return;
+  }
+  const result = tickHelpers(state, carry, elapsedMs);
+  carry = result.carry;
+  if (result.state !== state) {
+    commitGame(result.state);
+  }
 }

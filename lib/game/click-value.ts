@@ -18,11 +18,15 @@ export const getClickValue: GetClickValue = (modifiers) =>
   1 * modifiers.multiplier * modifiers.combo * (modifiers.crit ? 10 : 1) * modifiers.goldenBonus;
 
 /** 3 with Triple click, else 2 with Double click, else 1 (specs/click-upgrades). */
-export const getClickMultiplier: GetClickMultiplier = () => {
-  throw new Error("not implemented");
+export const getClickMultiplier: GetClickMultiplier = (state) => {
+  if (state.upgrades.includes("triple-click")) {
+    return 3;
+  }
+  return state.upgrades.includes("double-click") ? 2 : 1;
 };
 
 /** Stage 2 modifiers: multiplier from upgrades, everything else neutral. */
-export const getClickModifiers: GetClickModifiers = () => {
-  throw new Error("not implemented");
-};
+export const getClickModifiers: GetClickModifiers = (state) => ({
+  ...NEUTRAL_CLICK_MODIFIERS,
+  multiplier: getClickMultiplier(state),
+});

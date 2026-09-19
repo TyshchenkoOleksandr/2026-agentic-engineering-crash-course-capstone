@@ -27,9 +27,13 @@ import { useMediaQuery } from "./useMediaQuery";
 
 export type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string;
 
+/** "reduced" mirrors `prefers-reduced-motion: reduce` and the `data-motion` attribute (D17). */
+export type Motion = "full" | "reduced";
+
 interface PreferencesContextValue {
   readonly theme: Theme;
   readonly language: Language;
+  readonly motion: Motion;
   readonly toggleTheme: () => void;
   readonly toggleLanguage: () => void;
   readonly t: Translate;
@@ -52,7 +56,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   // A saved choice wins permanently; without one the system preference is followed live (D8).
   const theme = resolveTheme(stored.theme, systemPrefersDark);
   const language = stored.language;
-  const motion = prefersReducedMotion ? "reduced" : "full";
+  const motion: Motion = prefersReducedMotion ? "reduced" : "full";
 
   // React owns the <html> attributes once mounted. This also re-applies them after the dev-mode
   // Strict Mode remount, which drops the attributes set by the pre-paint script.
@@ -75,11 +79,12 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     () => ({
       theme,
       language,
+      motion,
       toggleTheme,
       toggleLanguage,
       t: (key, params) => t(language, key, params),
     }),
-    [theme, language, toggleTheme, toggleLanguage],
+    [theme, language, motion, toggleTheme, toggleLanguage],
   );
 
   return <PreferencesContext.Provider value={value}>{children}</PreferencesContext.Provider>;
