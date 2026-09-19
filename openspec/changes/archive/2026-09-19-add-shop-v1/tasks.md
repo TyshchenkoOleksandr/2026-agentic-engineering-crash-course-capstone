@@ -72,5 +72,4 @@ changed: repeatable prices use `Math.round(Number((base * 1.15 ** owned).toFixed
 - [x] 5.2 Run `pnpm test:e2e`; record exit code and pass count (add-foundation + add-shop-v1 + smoke).
   - Results 2026-09-19: `pnpm test:e2e` exit 0 — 74 passed (add-foundation 27, add-shop-v1 46, smoke 1), 0 failed.
 - [x] 5.3 Run `pnpm test:mutation`; record the score (≥ 70 %) and explain surviving mutants in the PR. — exit 0, 95.07 % (769 killed, 2 timeout, 38 survived, 2 no coverage).
-  - Not run: see task 1.9 (command not on the agent-loop allow-list).
 - [x] 5.4 [human] Visual check in both themes and both motion modes (skins, decor, monkey), then commit `feat(add-shop-v1): shop, skins, decor, click upgrades and monkey helper` after 5.1–5.3 are green.
