@@ -9,7 +9,7 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
-    // e2e/ belongs to Playwright (pnpm test:e2e).
-    exclude: [...configDefaults.exclude, "e2e/**"],
+    // e2e/ belongs to Playwright (pnpm test:e2e); .stryker-tmp/ is the mutation-run sandbox copy.
+    exclude: [...configDefaults.exclude, "e2e/**", ".stryker-tmp/**"],
   },
 });

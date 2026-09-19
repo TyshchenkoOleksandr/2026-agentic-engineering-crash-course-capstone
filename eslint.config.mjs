@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Stryker sandbox (pnpm test:mutation): a copy of the repo while a mutation run is in progress.
+    ".stryker-tmp/**",
   ]),
 ]);
 
