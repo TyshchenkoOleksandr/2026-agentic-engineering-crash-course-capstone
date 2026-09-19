@@ -8,6 +8,6 @@ export const NEUTRAL_CLICK_MODIFIERS: ClickModifiers = Object.freeze({
   goldenBonus: 1,
 });
 
-export const getClickValue: GetClickValue = () => {
-  throw new Error("not implemented");
-};
+/** value = 1 × multiplier × combo × (crit ? 10 : 1) × goldenBonus (design D2). */
+export const getClickValue: GetClickValue = (modifiers) =>
+  1 * modifiers.multiplier * modifiers.combo * (modifiers.crit ? 10 : 1) * modifiers.goldenBonus;
