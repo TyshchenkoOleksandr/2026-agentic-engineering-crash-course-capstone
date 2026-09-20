@@ -255,8 +255,17 @@ test.describe("crit", () => {
     const flash = page.getByTestId("crit-flash");
     await expect(flash).toBeVisible();
     expect(await animationName(flash)).toBe("crit-flash");
-    const flashBox = await boxOf(flash);
-    const buttonBox = await boxOf(mainButton);
+    // Both boxes are read in one frame: the shake layer moves them together, so two separate
+    // boundingBox() round-trips would sample different points of the 300 ms crit-shake.
+    const [flashBox, buttonBox] = await page.evaluate(() => {
+      const box = (id: string) => {
+        const rect = document
+          .querySelector(`[data-testid="${id}"]`)!
+          .getBoundingClientRect();
+        return { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+      };
+      return [box("crit-flash"), box("main-button")] as const;
+    });
     expect(Math.abs(flashBox.x - buttonBox.x)).toBeLessThanOrEqual(1);
     expect(Math.abs(flashBox.y - buttonBox.y)).toBeLessThanOrEqual(1);
     expect(Math.abs(flashBox.width - buttonBox.width)).toBeLessThanOrEqual(1);
