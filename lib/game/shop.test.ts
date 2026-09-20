@@ -12,6 +12,7 @@ import {
   SHOP_CATALOG,
   SHOP_UNLOCK_CLICKS,
 } from "./shop";
+import { VIDEO_DECOR, VIDEO_SIZE } from "./videos";
 import type {
   BuyResult,
   GameState,
@@ -39,6 +40,7 @@ function fresh(): GameState {
     enabledSkins: [],
     material: "classic",
     decor: [],
+    videos: [],
     upgrades: [],
     helpers: { monkey: 0, robot: 0, factory: 0 },
     levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
@@ -104,7 +106,21 @@ describe("shop: Shop catalog", () => {
       "speed-robot",
       "factory",
       "speed-factory",
+      "video-runner",
+      "video-parkour",
+      "video-soap",
+      "video-kinetic-sand",
+      "video-slime",
+      "video-hydraulic",
+      "video-marble",
+      "video-aquarium",
+      "video-fireplace",
+      "video-rain",
     ]);
+    expect(SHOP_CATALOG.length).toBe(29);
+    expect(
+      SHOP_CATALOG.filter((item) => item.kind === "video-decor").map((item) => item.id),
+    ).toEqual(VIDEO_DECOR.map((v) => v.id));
   });
 
   it("Catalog entries", () => {
@@ -235,8 +251,46 @@ describe("shop: Shop catalog", () => {
         price: 120000,
         revealAt: 75000,
       },
+      ...(
+        [
+          ["video-runner", 5000, 3000],
+          ["video-parkour", 7500, 4500],
+          ["video-soap", 10000, 6000],
+          ["video-kinetic-sand", 12500, 7500],
+          ["video-slime", 15000, 9000],
+          ["video-hydraulic", 20000, 12000],
+          ["video-marble", 25000, 15000],
+          ["video-aquarium", 30000, 18000],
+          ["video-fireplace", 40000, 24000],
+          ["video-rain", 50000, 30000],
+        ] as const
+      ).map(([id, price, revealAt]) => ({
+        kind: "video-decor",
+        id,
+        category: "video",
+        size: { width: 192, height: 108 },
+        price,
+        revealAt,
+      })),
     ]);
 
+    expect(VIDEO_SIZE).toEqual({ width: 192, height: 108 });
+    expect(getShopItem("video-runner")).toEqual({
+      kind: "video-decor",
+      id: "video-runner",
+      category: "video",
+      size: { width: 192, height: 108 },
+      price: 5000,
+      revealAt: 3000,
+    });
+    expect(getShopItem("video-rain")).toEqual({
+      kind: "video-decor",
+      id: "video-rain",
+      category: "video",
+      size: { width: 192, height: 108 },
+      price: 50000,
+      revealAt: 30000,
+    });
     expect(getShopItem("gold")).toEqual({
       kind: "skin",
       id: "gold",
@@ -350,6 +404,16 @@ describe("shop: Progressive reveal", () => {
     ["monkey", 30],
     ["robot", 600],
     ["factory", 8000],
+    ["video-runner", 3000],
+    ["video-parkour", 4500],
+    ["video-soap", 6000],
+    ["video-kinetic-sand", 7500],
+    ["video-slime", 9000],
+    ["video-hydraulic", 12000],
+    ["video-marble", 15000],
+    ["video-aquarium", 18000],
+    ["video-fireplace", 24000],
+    ["video-rain", 30000],
   ] as const)("Reveal boundaries for every item: %s at %i", (id, revealAt) => {
     expect(isItemRevealed(S({ totalClicks: revealAt - 1 }), id)).toBe(false);
     expect(isItemRevealed(S({ totalClicks: revealAt }), id)).toBe(true);
@@ -414,6 +478,21 @@ describe("shop: Progressive reveal", () => {
         ),
       ),
     ).toEqual(SHOP_CATALOG.map((item) => item.id));
+  });
+
+  it("Videos are revealed one by one", () => {
+    expect(ids(getRevealedItems(S({ totalClicks: 2999 }), "video"))).toEqual([]);
+    expect(ids(getRevealedItems(S({ totalClicks: 3000 }), "video"))).toEqual(["video-runner"]);
+    expect(ids(getRevealedItems(S({ totalClicks: 9000 }), "video"))).toEqual([
+      "video-runner",
+      "video-parkour",
+      "video-soap",
+      "video-kinetic-sand",
+      "video-slime",
+    ]);
+    expect(ids(getRevealedItems(S({ totalClicks: 30000 }), "video"))).toEqual(
+      VIDEO_DECOR.map((v) => v.id),
+    );
   });
 
   it("Nothing revealed before 10", () => {
@@ -763,6 +842,40 @@ describe("shop: Buying", () => {
     expect(state.helpers).toEqual({ monkey: 3, robot: 0, factory: 0 });
     expect(state.totalClicks).toBe(30);
     expect(buyItem(state, "monkey")).toEqual({ ok: false, reason: "unaffordable" });
+  });
+
+  it("Buy a video with a position", () => {
+    expect(
+      buyItem(S({ balance: 6000, totalClicks: 3000 }), "video-runner", {
+        videoPosition: { x: 0.25, y: 0.75 },
+      }),
+    ).toEqual({
+      ok: true,
+      state: S({
+        balance: 1000,
+        totalClicks: 3000,
+        videos: [{ id: "video-runner", position: { x: 0.25, y: 0.75 } }],
+      }),
+    });
+  });
+
+  it("Videos keep catalog order and can be owned only once", () => {
+    const next = okState(
+      buyItem(
+        S({
+          balance: 20000,
+          totalClicks: 30000,
+          videos: [{ id: "video-soap", position: null }],
+        }),
+        "video-parkour",
+      ),
+    );
+    expect(next.videos).toEqual([
+      { id: "video-parkour", position: null },
+      { id: "video-soap", position: null },
+    ]);
+    expect(next.balance).toBe(12500);
+    expect(buyItem(next, "video-soap")).toEqual({ ok: false, reason: "owned" });
   });
 
   it("Failure reasons", () => {

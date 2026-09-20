@@ -65,6 +65,15 @@ function S(overrides: StateOverrides = {}): SaveState {
   };
 }
 
+/**
+ * The v4 (Stage 4) payload: `S({...})` plus `videos: []` (design D11/D20). Used only for expected
+ * save envelopes in the one Stage 2 → Stage 3 migration test updated for add-content-v3; seeding in
+ * this file stays v2 / v3.
+ */
+function S4(overrides: StateOverrides = {}): SaveState & { videos: DecorEntry[] } {
+  return { ...S(overrides), videos: [] };
+}
+
 /** The Stage 2 (v2) fresh payload with the listed top-level fields replaced (no merging). */
 function S2(overrides: Partial<SaveStateV2> = {}): SaveStateV2 {
   return {
@@ -913,8 +922,8 @@ test.describe("game-persistence", () => {
     await expect
       .poll(() => readSave(page))
       .toEqual({
-        version: 3,
-        state: S({
+        version: 4,
+        state: S4({
           balance: 42,
           totalClicks: 71,
           ownedSkins: ["squish"],

@@ -4,7 +4,7 @@ import { clickMainButton, createInitialState, isBalanceVisible } from "./state";
 import type { GameState, HelperId, LeveledUpgradeId } from "./types";
 
 // ---------------------------------------------------------------------------
-// Helpers (notation from openspec/changes/add-upgrades-v2/design.md: FRESH, S({...}) with
+// Helpers (notation from openspec/changes/add-content-v3/design.md: FRESH, S({...}) with
 // `helpers` and `levels` shallow-merged into the FRESH defaults)
 // ---------------------------------------------------------------------------
 
@@ -21,6 +21,7 @@ function fresh(): GameState {
     enabledSkins: [],
     material: "classic",
     decor: [],
+    videos: [],
     upgrades: [],
     helpers: { monkey: 0, robot: 0, factory: 0 },
     levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
@@ -55,17 +56,32 @@ function deepFreeze<T>(value: T): T {
 
 describe("clicker-core: Initial game state", () => {
   it("Fresh state values", () => {
-    expect(createInitialState()).toStrictEqual({
+    const state = createInitialState();
+    expect(state).toStrictEqual({
       balance: 0,
       totalClicks: 0,
       ownedSkins: [],
       enabledSkins: [],
       material: "classic",
       decor: [],
+      videos: [],
       upgrades: [],
       helpers: { monkey: 0, robot: 0, factory: 0 },
       levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
     });
+    // No `achievements`, no `stats`: the trophies live in their own storage key (design D12).
+    expect(Object.keys(state)).toEqual([
+      "balance",
+      "totalClicks",
+      "ownedSkins",
+      "enabledSkins",
+      "material",
+      "decor",
+      "videos",
+      "upgrades",
+      "helpers",
+      "levels",
+    ]);
   });
 
   it("Fresh state is a new object each time", () => {
@@ -76,6 +92,7 @@ describe("clicker-core: Initial game state", () => {
     expect(a).not.toBe(b);
     expect(a.ownedSkins).not.toBe(b.ownedSkins);
     expect(a.decor).not.toBe(b.decor);
+    expect(a.videos).not.toBe(b.videos);
     expect(a.helpers).not.toBe(b.helpers);
     expect(a.levels).not.toBe(b.levels);
   });

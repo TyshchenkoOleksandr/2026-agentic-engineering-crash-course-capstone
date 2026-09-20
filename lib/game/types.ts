@@ -1,8 +1,11 @@
 // Shared contract for Dopamine Clicker.
 //   Stage 1: OpenSpec change add-foundation (archived).
 //   Stage 2: OpenSpec change add-shop-v1 (archived): shop, skins, decor, Double/Triple click, Monkey.
-//   Stage 3: OpenSpec change add-upgrades-v2: Crit (+ visual feedback), Combo, Golden button, Robot,
-//            Factory, helper speed-ups, save schema v3.
+//   Stage 3: OpenSpec change add-upgrades-v2 (archived): Crit (+ visual feedback), Combo, Golden
+//            button, Robot, Factory, helper speed-ups, save schema v3.
+//   Stage 4: OpenSpec change add-content-v3: cat SVG, Soft shadow / Floating +N contrast fixes,
+//            video decor (third-party iframes), 30 achievements in their own trophy file,
+//            save schema v4 (one new field: `videos`).
 // Types only — no runtime logic lives here. Owned by spec-writer; other agents propose changes in
 // their reports instead of editing this file.
 //
@@ -13,9 +16,10 @@
 //   lib/game/state.ts        -> CreateInitialState, ClickMainButton, IsBalanceVisible
 //   lib/game/save.ts         -> SerializeGame, ValidateGameState, MigrateSave, ParseSave,
 //                               LoadGame, SaveGame, ClearGame, SAVE_KEY, SAVE_BACKUP_KEY,
-//                               CURRENT_SAVE_VERSION (= 3),
-//                               MIGRATIONS (= { 1: migrateV1ToV2, 2: migrateV2ToV3 }),
-//                               migrateV1ToV2, migrateV2ToV3                 (Stage 3: +v3)
+//                               CURRENT_SAVE_VERSION (= 4),
+//                               MIGRATIONS (= { 1: migrateV1ToV2, 2: migrateV2ToV3,
+//                                               3: migrateV3ToV4 }),
+//                               migrateV1ToV2, migrateV2ToV3, migrateV3ToV4  (Stage 4: +v4)
 //   lib/game/preferences.ts  -> ParseTheme, ResolveTheme, ToggleTheme, ParseLanguage,
 //                               ResolveLanguage, ToggleLanguage, LoadPreferences, SaveTheme,
 //                               SaveLanguage, THEME_KEY, LANGUAGE_KEY
@@ -37,9 +41,22 @@
 //                               CreateGoldenState, TickGolden, CatchGolden, GetGoldenBonus
 //                                                                             (Stage 3, new)
 //   lib/game/press.ts        -> CreateClickRuntime, PressMainButton          (Stage 3, new)
+//   lib/game/videos.ts       -> VIDEO_DECOR, VIDEO_SIZE, MAX_ACTIVE_VIDEOS, VIDEO_LOAD_TIMEOUT_MS,
+//                               VIDEO_EMBED_HOST, GetVideoEntry, BuildEmbedUrl, GetActiveVideos
+//                                                                             (Stage 4, new)
+//   lib/game/achievements.ts -> ACHIEVEMENTS, ACHIEVEMENT_TOAST_MS, ACHIEVEMENT_TOAST_GAP_MS,
+//                               GetAchievement, IsAchievementUnlocked, GetAchievementProgress,
+//                               GetAchievementStats, EvaluateAchievements, CreateToastQueue,
+//                               EnqueueToasts, AdvanceToastQueue              (Stage 4, new)
+//   lib/game/trophies.ts     -> TROPHIES_KEY, TROPHIES_BACKUP_KEY, CURRENT_TROPHIES_VERSION (= 1),
+//                               CreateInitialTrophies, SerializeTrophies, ValidateTrophies,
+//                               ParseTrophies, LoadTrophies, SaveTrophies, ClearTrophies
+//                                                                             (Stage 4, new)
+//   lib/ui/contrast.ts       -> ParseCssColor, CompositeOver, RelativeLuminance, ContrastRatio,
+//                               LastShadowColor                               (Stage 4, new)
 //
-// Out of scope until Stage 4: remaining skins, sound packs and the sound slot, remaining decor,
-// hiding / re-rolling decor, offline progress.
+// Out of scope (Stage 5 or never): the remaining skins, sound packs and the sound slot, the ten
+// remaining own-art decor items, hiding / re-rolling decor, offline progress, achievement rewards.
 
 // ---------------------------------------------------------------------------
 // Randomness
@@ -76,6 +93,19 @@ export type SkinSlot = "stack" | "material";
 
 export type DecorId = "sleeping-cat" | "lava-lamp" | "hydraulic-press";
 
+/** Video decor bought in the new `video` category (Stage 4, design D3). */
+export type VideoDecorId =
+  | "video-runner"
+  | "video-parkour"
+  | "video-soap"
+  | "video-kinetic-sand"
+  | "video-slime"
+  | "video-hydraulic"
+  | "video-marble"
+  | "video-aquarium"
+  | "video-fireplace"
+  | "video-rain";
+
 /** One-time click multipliers (Stage 2). */
 export type ClickUpgradeId = "double-click" | "triple-click";
 /** One-time upgrades that unlock a main-button mechanic (Stage 3). */
@@ -96,8 +126,10 @@ export type ShopItemId =
   | ClickUpgradeId
   | FeatureUpgradeId
   | LeveledUpgradeId
-  | HelperId;
-export type ShopCategory = "skins" | "decor" | "upgrades";
+  | HelperId
+  | VideoDecorId;
+/** Rendered in this order; "video" is the Stage 4 category (design D4). */
+export type ShopCategory = "skins" | "decor" | "upgrades" | "video";
 
 // ---------------------------------------------------------------------------
 // Catalog entries (SHOP_CATALOG in lib/game/shop.ts, in display order)
@@ -171,13 +203,22 @@ export interface HelperItem extends ShopItemBase {
   readonly clicksPerSecond: number;
 }
 
+/** Video decor: bought once, placed like decor, `size` is always VIDEO_SIZE (Stage 4). */
+export interface VideoDecorItem extends ShopItemBase {
+  readonly kind: "video-decor";
+  readonly id: VideoDecorId;
+  readonly category: "video";
+  readonly size: Size;
+}
+
 export type ShopItem =
   | SkinItem
   | DecorItem
   | ClickUpgradeItem
   | FeatureUpgradeItem
   | LeveledUpgradeItem
-  | HelperItem;
+  | HelperItem
+  | VideoDecorItem;
 
 // ---------------------------------------------------------------------------
 // Game state
@@ -219,33 +260,34 @@ export interface GameStateV2 extends GameStateV1 {
   readonly helpers: Readonly<{ monkey: number }>;
 }
 
-/**
- * Full persisted game state. Schema version 3. All counts are non-negative safe integers.
- * Every array is kept in SHOP_CATALOG order and has no duplicates (so deep equality is stable).
- * Runtime-only values (helper carry, combo, golden button, crit effect) are never part of it.
- */
-export interface GameState extends GameStateV1 {
-  /** Purchased skins (stack and material). */
+/** Schema version 3 state payload (Stage 3). Kept as the input type of the v3 -> v4 migration. */
+export interface GameStateV3 extends GameStateV1 {
   readonly ownedSkins: readonly SkinId[];
-  /** Enabled stack skins; always a subset of `ownedSkins`. */
   readonly enabledSkins: readonly StackSkinId[];
-  /** Equipped material; "gold" only if Gold is owned. */
   readonly material: MaterialId;
-  /** Purchased decor with its saved position. */
   readonly decor: readonly PlacedDecor[];
-  /**
-   * Purchased one-time upgrades in catalog order ("double-click", "triple-click", "combo",
-   * "golden-button"); "triple-click" only together with "double-click".
-   */
   readonly upgrades: readonly UpgradeId[];
-  /** Number of owned helpers per type (exactly the keys monkey, robot, factory). */
   readonly helpers: Readonly<Record<HelperId, number>>;
-  /**
-   * Level of every leveled upgrade (exactly the keys crit, speed-monkey, speed-robot,
-   * speed-factory), each an integer in [0, maxLevel]; a speed-up level > 0 only if at least one
-   * helper of its type is owned.
-   */
   readonly levels: Readonly<Record<LeveledUpgradeId, number>>;
+}
+
+/** A bought video decor with its saved position (same convention as PlacedDecor, Stage 4). */
+export interface PlacedVideo {
+  readonly id: VideoDecorId;
+  /** `null` when no free spot was found at purchase time (rendered in the shared dock). */
+  readonly position: DecorPosition | null;
+}
+
+/**
+ * Full persisted game state. Schema version 4. All counts are non-negative safe integers.
+ * Every array is kept in SHOP_CATALOG order and has no duplicates (so deep equality is stable).
+ * Runtime-only values (helper carry, main-click carry, combo, golden button, crit effect, toast
+ * queue) are never part of it, and neither are the trophies: unlocked achievements and their
+ * lifetime counters live in their own storage key so a reset can keep them (design D12).
+ */
+export interface GameState extends GameStateV3 {
+  /** Purchased video decor with its saved position (Stage 4; the only v3 -> v4 addition). */
+  readonly videos: readonly PlacedVideo[];
 }
 
 /**
@@ -375,6 +417,168 @@ export interface PressResult {
 }
 
 // ---------------------------------------------------------------------------
+// Video decor (Stage 4) — lib/game/videos.ts
+// ---------------------------------------------------------------------------
+
+/** Only provider of this stage; a new one adds a branch in `buildEmbedUrl` (design D6). */
+export type VideoProvider = "youtube-nocookie";
+
+/** One configurable entry of VIDEO_DECOR; swapping a video means editing this array only. */
+export interface VideoEntry {
+  readonly id: VideoDecorId;
+  readonly provider: VideoProvider;
+  /** Provider video id (Stage 4 ships placeholders until the human supplies the real ones). */
+  readonly videoId: string;
+  /** Optional start offset in whole seconds; only a value > 0 is put into the URL. */
+  readonly startSeconds?: number;
+}
+
+/** Lifecycle of one video decor element in the page (design D7). */
+export type VideoState = "idle" | "loading" | "playing" | "offline";
+
+// ---------------------------------------------------------------------------
+// Achievements (Stage 4) — lib/game/achievements.ts
+// ---------------------------------------------------------------------------
+
+export type AchievementId =
+  | "first-click"
+  | "clicks-100"
+  | "clicks-1000"
+  | "clicks-10000"
+  | "clicks-100000"
+  | "balance-1000"
+  | "balance-50000"
+  | "first-purchase"
+  | "purchases-10"
+  | "purchases-25"
+  | "skins-3"
+  | "skins-all"
+  | "gold-equipped"
+  | "first-decor"
+  | "decor-all"
+  | "cat-nap"
+  | "first-video"
+  | "videos-all"
+  | "first-helper"
+  | "helpers-10"
+  | "factory-owner"
+  | "first-crit"
+  | "crits-100"
+  | "combo-5"
+  | "combo-max"
+  | "first-golden"
+  | "golden-10"
+  | "reset-once"
+  | "achievements-10"
+  | "achievements-all";
+
+/** Grouping shown in the panel; purely cosmetic (design D10). */
+export type AchievementCategory =
+  | "clicks"
+  | "balance"
+  | "purchases"
+  | "skins"
+  | "decor"
+  | "video"
+  | "helpers"
+  | "crit"
+  | "combo"
+  | "golden"
+  | "reset"
+  | "meta";
+
+/** Every number an achievement can be measured against; see GetAchievementStats. */
+export type AchievementMetric =
+  | "totalClicks"
+  | "balance"
+  | "purchases"
+  | "skinsOwned"
+  | "goldEquipped"
+  | "decorOwned"
+  | "catOwned"
+  | "videosOwned"
+  | "helpersTotal"
+  | "factories"
+  | "crits"
+  | "maxComboLevel"
+  | "goldenCaught"
+  | "resets"
+  | "achievementsUnlocked";
+
+/**
+ * Data-driven definition: the predicate is `stats[metric] >= threshold` (design D10), so the whole
+ * catalog stays pure, serializable and exhaustively testable.
+ */
+export interface Achievement {
+  readonly id: AchievementId;
+  readonly category: AchievementCategory;
+  readonly metric: AchievementMetric;
+  /** Integer > 0. Achievements with threshold 1 show no progress in the panel. */
+  readonly threshold: number;
+}
+
+/**
+ * All 15 metrics; `achievementsUnlocked` is filled in by EvaluateAchievements. Eleven of them are
+ * derived from the current `GameState` (and therefore drop back to 0 after a reset), four come from
+ * the trophy counters (design D10, D12).
+ */
+export type AchievementStats = Readonly<Record<AchievementMetric, number>>;
+
+/**
+ * Lifetime counters that only achievements read (design D12). They live in the trophy file, not in
+ * the game save, so a progress reset keeps them; `resets` is incremented by the reset itself.
+ */
+export interface TrophyStats {
+  /** Number of crit presses. */
+  readonly crits: number;
+  /** Number of golden buttons caught. */
+  readonly goldenCaught: number;
+  /** Highest combo level ever reached, integer in [0, COMBO_MAX_LEVEL]. */
+  readonly maxComboLevel: number;
+  /** Number of confirmed progress resets. */
+  readonly resets: number;
+}
+
+/**
+ * Everything the trophy case holds. Stored under TROPHIES_KEY, never inside the game save, and
+ * never touched by "Reset progress" other than the `resets` increment (design D12).
+ */
+export interface Trophies {
+  /** Unlocked achievements in ACHIEVEMENTS order, no duplicates; unlocks are sticky. */
+  readonly unlocked: readonly AchievementId[];
+  readonly stats: TrophyStats;
+}
+
+export interface AchievementEvaluation {
+  /** Every unlocked id in catalog order, including the ones that were already unlocked. */
+  readonly unlocked: readonly AchievementId[];
+  /** Only the ids this call added, in catalog order; drives the toast queue. */
+  readonly newlyUnlocked: readonly AchievementId[];
+}
+
+/** Runtime-only toast state (design D13); never saved. */
+export interface ToastQueue {
+  /** The achievement currently shown, or null while idle or during the gap. */
+  readonly current: AchievementId | null;
+  /** Remaining ms of the current toast, or of the gap when `current` is null; 0 when idle. */
+  readonly remainingMs: number;
+  /** Waiting ids in catalog order. */
+  readonly pending: readonly AchievementId[];
+}
+
+// ---------------------------------------------------------------------------
+// Colour maths (Stage 4) — lib/ui/contrast.ts, used by the e2e contrast assertions
+// ---------------------------------------------------------------------------
+
+/** Channels 0–255, alpha 0–1. */
+export interface Rgba {
+  readonly r: number;
+  readonly g: number;
+  readonly b: number;
+  readonly a: number;
+}
+
+// ---------------------------------------------------------------------------
 // Shop
 // ---------------------------------------------------------------------------
 
@@ -400,6 +604,8 @@ export type BuyFailureReason = Exclude<ShopItemStatus, "available">;
 export interface BuyOptions {
   /** Decor only: position chosen by PlaceDecor at purchase time. Missing = null. */
   readonly decorPosition?: DecorPosition | null;
+  /** Video decor only: position chosen by PlaceDecor with VIDEO_SIZE. Missing = null (Stage 4). */
+  readonly videoPosition?: DecorPosition | null;
 }
 
 export type BuyResult =
@@ -469,8 +675,29 @@ export type SaveKey = "dopamine-clicker:save";
 /** Storage key of the backup of the last corrupted raw save (value of SAVE_BACKUP_KEY). */
 export type SaveBackupKey = "dopamine-clicker:save:bad";
 
+/** Storage key of the trophy file (value of TROPHIES_KEY in lib/game/trophies.ts, Stage 4). */
+export type TrophiesKey = "dopamine-clicker:trophies";
+
+/** Storage key of the backup of the last corrupted raw trophy file (TROPHIES_BACKUP_KEY). */
+export type TrophiesBackupKey = "dopamine-clicker:trophies:bad";
+
+/** Version of the trophy schema written by this build. */
+export type CurrentTrophiesVersion = 1;
+
+/** On-disk envelope written under TROPHIES_KEY. */
+export interface TrophyFileV1 {
+  readonly version: 1;
+  readonly trophies: Trophies;
+}
+
+/** Same statuses as a game save; `migrated` cannot occur while the only version is 1. */
+export interface TrophiesLoadResult {
+  readonly trophies: Trophies;
+  readonly status: LoadStatus;
+}
+
 /** Version of the save schema written by this build. */
-export type CurrentSaveVersion = 3;
+export type CurrentSaveVersion = 4;
 
 /** Stage 1 on-disk envelope (read-only now; migrated v1 -> v2 -> v3 on load). */
 export interface SaveFileV1 {
@@ -484,9 +711,15 @@ export interface SaveFileV2 {
   readonly state: GameStateV2;
 }
 
-/** On-disk envelope written under SAVE_KEY from Stage 3 on. */
+/** Stage 3 on-disk envelope (read-only now; migrated v3 -> v4 on load). */
 export interface SaveFileV3 {
   readonly version: 3;
+  readonly state: GameStateV3;
+}
+
+/** On-disk envelope written under SAVE_KEY from Stage 4 on. */
+export interface SaveFileV4 {
+  readonly version: 4;
   readonly state: GameState;
 }
 
@@ -499,13 +732,16 @@ export interface UnknownSaveFile {
 /** Converts the `state` payload of version N into the payload of version N + 1. */
 export type Migration = (state: unknown) => unknown;
 
-/** Keyed by SOURCE version: table[1] migrates v1 -> v2, table[2] migrates v2 -> v3. */
+/** Keyed by SOURCE version: table[1] migrates v1 -> v2, table[2] v2 -> v3, table[3] v3 -> v4. */
 export type MigrationTable = Readonly<Record<number, Migration>>;
 
 export interface ParseSaveOptions {
-  /** Defaults to the built-in table MIGRATIONS (`{ 1: migrateV1ToV2, 2: migrateV2ToV3 }`). */
+  /**
+   * Defaults to the built-in table MIGRATIONS
+   * (`{ 1: migrateV1ToV2, 2: migrateV2ToV3, 3: migrateV3ToV4 }`).
+   */
   readonly migrations?: MigrationTable;
-  /** Defaults to CURRENT_SAVE_VERSION (3). */
+  /** Defaults to CURRENT_SAVE_VERSION (4). */
   readonly targetVersion?: number;
 }
 
@@ -563,7 +799,7 @@ export type GetClickMultiplier = (state: GameState) => 1 | 2 | 3;
 export type GetClickModifiers = (state: GameState, context?: ClickContext) => ClickModifiers;
 
 // state.ts
-/** v3 fresh state; see specs/clicker-core "Initial game state". */
+/** v4 fresh state; see specs/clicker-core "Initial game state". */
 export type CreateInitialState = () => GameState;
 /**
  * Carry-free click: adds `Math.floor(GetClickValue(modifiers))` to balance and 1 to totalClicks;
@@ -690,14 +926,16 @@ export type CreateClickRuntime = () => ClickRuntime;
 export type PressMainButton = (input: PressInput) => PressResult;
 
 // save.ts
-/** Writes `{ version: 3, state }` with exactly the GameState fields (no timestamps, no runtime). */
+/** Writes `{ version: 4, state }` with exactly the GameState fields (no timestamps, no runtime). */
 export type SerializeGame = (state: GameState) => string;
-/** v3 validator; returns a normalized copy (arrays in catalog order, extra keys dropped) or null. */
+/** v4 validator; returns a normalized copy (arrays in catalog order, extra keys dropped) or null. */
 export type ValidateGameState = (value: unknown) => GameState | null;
 /** Built-in MIGRATIONS[1]: v1 payload -> v2 payload with default shop fields (unchanged). */
 export type MigrateV1ToV2 = (state: unknown) => unknown;
 /** Built-in MIGRATIONS[2]: v2 payload -> v3 payload (robot/factory 0, all levels 0). */
 export type MigrateV2ToV3 = (state: unknown) => unknown;
+/** Built-in MIGRATIONS[3]: v3 payload -> v4 payload (adds `videos: []`, nothing else). */
+export type MigrateV3ToV4 = (state: unknown) => unknown;
 export type MigrateSave = (
   file: UnknownSaveFile,
   migrations: MigrationTable,
@@ -729,3 +967,90 @@ export type LoadPreferences = (storage: KeyValueStorage) => Preferences;
 /** Return false (never throw) when storage rejects the write. */
 export type SaveTheme = (storage: KeyValueStorage, theme: Theme) => boolean;
 export type SaveLanguage = (storage: KeyValueStorage, language: Language) => boolean;
+
+// trophies.ts (Stage 4) — the trophy file, independent of the game save
+/** `{ unlocked: [], stats: { crits: 0, goldenCaught: 0, maxComboLevel: 0, resets: 0 } }`, new each call. */
+export type CreateInitialTrophies = () => Trophies;
+/** Writes `{ version: 1, trophies }` with exactly the Trophies fields (no timestamps, no runtime). */
+export type SerializeTrophies = (trophies: Trophies) => string;
+/**
+ * Accepts a non-array object whose `unlocked` is an array of distinct known AchievementIds and
+ * whose `stats` is a non-array object with exactly the four counters (non-negative safe integers,
+ * `maxComboLevel` in [0, 10]); returns a normalized copy (unlocked in ACHIEVEMENTS order, unknown
+ * keys dropped) or null.
+ */
+export type ValidateTrophies = (value: unknown) => Trophies | null;
+/** Pure: never touches storage. A version other than 1 is `corrupted` (no migrations yet). */
+export type ParseTrophies = (raw: string | null) => TrophiesLoadResult;
+/**
+ * Reads TROPHIES_KEY and parses it. Never throws. On `corrupted` with a non-null raw value, copies
+ * the raw string verbatim to TROPHIES_BACKUP_KEY (mirrors LoadGame); never modifies TROPHIES_KEY.
+ */
+export type LoadTrophies = (storage: KeyValueStorage) => TrophiesLoadResult;
+/** Returns false (never throws) when storage rejects the write. */
+export type SaveTrophies = (storage: KeyValueStorage, trophies: Trophies) => boolean;
+/**
+ * Removes TROPHIES_KEY only. Never called by "Reset progress" (which keeps the trophies, design
+ * D12); kept for completeness and for tests. Never throws.
+ */
+export type ClearTrophies = (storage: KeyValueStorage) => void;
+
+// videos.ts (Stage 4)
+/** Entry of VIDEO_DECOR with that id (throws for an unknown id, like `getShopItem`). */
+export type GetVideoEntry = (id: VideoDecorId) => VideoEntry;
+/**
+ * `<VIDEO_EMBED_HOST>/embed/<videoId>?autoplay=1&mute=1&loop=1&playlist=<videoId>&controls=0
+ * &modestbranding=1&playsinline=1&rel=0&disablekb=1&iv_load_policy=3`, plus `&start=<n>` last when
+ * `startSeconds` is an integer > 0 (design D6). Pure: no DOM, no network.
+ */
+export type BuildEmbedUrl = (entry: VideoEntry) => string;
+/** First MAX_ACTIVE_VIDEOS placed videos with a non-null position, in the given order (design D5). */
+export type GetActiveVideos = (placed: readonly PlacedVideo[]) => readonly PlacedVideo[];
+
+// achievements.ts (Stage 4)
+/** Entry of ACHIEVEMENTS with that id. */
+export type GetAchievement = (id: AchievementId) => Achievement;
+/** `stats[achievement.metric] >= achievement.threshold`. */
+export type IsAchievementUnlocked = (achievement: Achievement, stats: AchievementStats) => boolean;
+/** `Math.min(1, Math.max(0, stats[metric] / threshold))`. */
+export type GetAchievementProgress = (achievement: Achievement, stats: AchievementStats) => number;
+/**
+ * All 15 metrics (design D10): eleven read from the current `GameState`, four (`crits`,
+ * `maxComboLevel`, `goldenCaught`, `resets`) copied from `trophies.stats`; `achievementsUnlocked`
+ * is 0 here and is filled in per pass by `evaluateAchievements`. Pure, never mutates its inputs.
+ */
+export type GetAchievementStats = (state: GameState, trophies: Trophies) => AchievementStats;
+/**
+ * Repeats passes over ACHIEVEMENTS until a pass adds nothing (at most ACHIEVEMENTS.length passes),
+ * recomputing `achievementsUnlocked` before each pass. Unknown input ids are dropped, known ones
+ * stay unlocked forever. Both result arrays are in catalog order.
+ */
+export type EvaluateAchievements = (
+  unlocked: readonly AchievementId[],
+  stats: AchievementStats,
+) => AchievementEvaluation;
+/** `{ current: null, remainingMs: 0, pending: [] }`, a new object each call. */
+export type CreateToastQueue = () => ToastQueue;
+/**
+ * Appends the ids that are neither `current` nor already pending and promotes the first one when
+ * nothing is showing and no gap is running; returns the input object when nothing is added.
+ */
+export type EnqueueToasts = (queue: ToastQueue, ids: readonly AchievementId[]) => ToastQueue;
+/**
+ * One tick of the toast queue: `elapsedMs` clamped to [0, MAX_TICK_MS] (NaN / negative -> 0), the
+ * input object returned when the effective elapsed is 0 or the queue is idle, otherwise toast ->
+ * gap -> next toast without carrying leftover time (design D13).
+ */
+export type AdvanceToastQueue = (queue: ToastQueue, elapsedMs: number) => ToastQueue;
+
+// ../ui/contrast.ts (Stage 4) — presentation maths used by the e2e colour assertions
+/** `#rgb`, `#rrggbb`, `rgb()/rgba()` with or without commas and alpha, `transparent`; else null. */
+export type ParseCssColor = (value: string) => Rgba | null;
+/** `{ r, g, b, a: 1 }` with `Math.round(fg.a * fg.c + (1 - fg.a) * bg.c)` per channel. */
+export type CompositeOver = (fg: Rgba, bg: Rgba) => Rgba;
+/** WCAG 2.1 relative luminance of the colour treated as opaque, in [0, 1]. */
+export type RelativeLuminance = (color: Rgba) => number;
+/** `Number(((L1 + 0.05) / (L2 + 0.05)).toFixed(4))`, L1 >= L2; non-opaque inputs are composited. */
+export type ContrastRatio = (a: Rgba, b: Rgba) => number;
+/** Colour of the last comma-separated layer of a computed `box-shadow`, or null. */
+export type LastShadowColor = (boxShadow: string) => Rgba | null;

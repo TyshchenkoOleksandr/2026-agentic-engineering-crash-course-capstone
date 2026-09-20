@@ -52,6 +52,16 @@ function S3(overrides: Partial<SaveState> = {}) {
   };
 }
 
+/**
+ * The same state as the v4 save schema writes it (add-content-v3 design D11/D20): `videos` is new
+ * (empty unless overridden), on top of the v3 shape. Used only for expected save envelopes; seeding
+ * stays v2.
+ */
+function S4(overrides: Partial<SaveState> & { videos?: DecorEntry[] } = {}) {
+  const { videos, ...rest } = overrides;
+  return { ...S3(rest), videos: videos ?? [] };
+}
+
 async function seedStorage(page: Page, values: Record<string, string>) {
   await page.addInitScript((entries) => {
     if (window.sessionStorage.getItem("__seeded")) {
@@ -278,8 +288,8 @@ test.describe("shop", () => {
     await expect
       .poll(() => readSave(page))
       .toEqual({
-        version: 3,
-        state: S3({
+        version: 4,
+        state: S4({
           balance: 0,
           totalClicks: 15,
           ownedSkins: ["soft-shadow"],
@@ -753,6 +763,7 @@ test.describe("helpers", () => {
         "enabledSkins",
         "material",
         "decor",
+        "videos",
         "upgrades",
         "helpers",
         "levels",
@@ -893,7 +904,7 @@ test.describe("game-persistence", () => {
     await page.getByTestId("main-button").click();
     await expect
       .poll(() => readSave(page))
-      .toEqual({ version: 3, state: S3({ balance: 41, totalClicks: 13 }) });
+      .toEqual({ version: 4, state: S4({ balance: 41, totalClicks: 13 }) });
   });
 });
 

@@ -31,6 +31,8 @@ const CATEGORY_LABELS: Record<ShopCategory, TranslationKey> = {
   skins: "shop.category.skins",
   decor: "shop.category.decor",
   upgrades: "shop.category.upgrades",
+  // Stage 4 (design D4): the heading itself is rendered by task 3.6, this keeps the map total.
+  video: "shop.category.video",
 };
 
 function nameKey(id: ShopItemId): TranslationKey {

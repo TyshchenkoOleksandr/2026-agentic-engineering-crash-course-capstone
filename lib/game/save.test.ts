@@ -6,6 +6,7 @@ import {
   migrateSave,
   migrateV1ToV2,
   migrateV2ToV3,
+  migrateV3ToV4,
   MIGRATIONS,
   parseSave,
   SAVE_BACKUP_KEY,
@@ -17,6 +18,7 @@ import {
 import type {
   GameState,
   GameStateV2,
+  GameStateV3,
   HelperId,
   KeyValueStorage,
   LeveledUpgradeId,
@@ -25,9 +27,9 @@ import type {
 } from "./types";
 
 // ---------------------------------------------------------------------------
-// Fakes and notation (openspec/changes/add-upgrades-v2/design.md: FRESH, S({...}) with
-// merged `helpers` / `levels`, S2({...}), V2(...), V3(...); specs/game-persistence:
-// RAW_V1(b, t), L0)
+// Fakes and notation (openspec/changes/add-content-v3/design.md: FRESH, S({...}) with
+// merged `helpers` / `levels`, S2({...}), S3({...}), V2(...), V3(...), V4(...);
+// specs/game-persistence: RAW_V1(b, t), L0)
 // ---------------------------------------------------------------------------
 
 interface FakeStorage extends KeyValueStorage {
@@ -74,6 +76,7 @@ function fresh(): GameState {
     enabledSkins: [],
     material: "classic",
     decor: [],
+    videos: [],
     upgrades: [],
     helpers: { monkey: 0, robot: 0, factory: 0 },
     levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
@@ -114,8 +117,33 @@ function V2(state: GameStateV2): string {
   return JSON.stringify({ version: 2, state });
 }
 
-function V3(state: GameState): string {
+/** The Stage 3 (v3) payload shape: the v4 state without `videos` (design notation S3). */
+type V3Overrides = Partial<Omit<GameStateV3, "helpers" | "levels">> & {
+  readonly helpers?: Partial<Record<HelperId, number>>;
+  readonly levels?: Partial<Record<LeveledUpgradeId, number>>;
+};
+
+function S3({ helpers, levels, ...rest }: V3Overrides = {}): GameStateV3 {
+  return {
+    balance: 0,
+    totalClicks: 0,
+    ownedSkins: [],
+    enabledSkins: [],
+    material: "classic",
+    decor: [],
+    upgrades: [],
+    ...rest,
+    helpers: { monkey: 0, robot: 0, factory: 0, ...helpers },
+    levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0, ...levels },
+  };
+}
+
+function V3(state: GameStateV3): string {
   return JSON.stringify({ version: 3, state });
+}
+
+function V4(state: GameState): string {
+  return JSON.stringify({ version: 4, state });
 }
 
 function RAW_V1(balance: number, totalClicks: number): string {
@@ -134,12 +162,12 @@ describe("game-persistence: Versioned save format", () => {
   it("Constants", () => {
     expect(SAVE_KEY).toBe("dopamine-clicker:save");
     expect(SAVE_BACKUP_KEY).toBe("dopamine-clicker:save:bad");
-    expect(CURRENT_SAVE_VERSION).toBe(3);
+    expect(CURRENT_SAVE_VERSION).toBe(4);
   });
 
   it("Serialize state", () => {
     expect(JSON.parse(serializeGame(S({ balance: 12, totalClicks: 30 })))).toStrictEqual({
-      version: 3,
+      version: 4,
       state: S({ balance: 12, totalClicks: 30 }),
     });
   });
@@ -150,21 +178,26 @@ describe("game-persistence: Versioned save format", () => {
         balance: 1,
         totalClicks: 1,
         decor: [{ id: "lava-lamp", position: { x: 0.5, y: 0.25 } }],
+        videos: [{ id: "video-runner", position: null }],
       }),
       carry: 400,
       clickCarry: 0.5,
       savedAt: 123,
       combo: { level: 3, lastClickAt: 5 },
       golden: { nextSpawnMs: 0, visible: null, bonusMs: 1000 },
+      toasts: { current: "first-click", remainingMs: 4000, pending: [] },
+      achievements: ["first-click"],
+      stats: { crits: 9, goldenCaught: 0, maxComboLevel: 0, resets: 0 },
       helpers: { monkey: 1, robot: 2, factory: 3, extra: 4 },
       levels: { ...L0, crit: 2, bonus: 1 },
     } as unknown as GameState;
     expect(JSON.parse(serializeGame(withRuntime))).toStrictEqual({
-      version: 3,
+      version: 4,
       state: S({
         balance: 1,
         totalClicks: 1,
         decor: [{ id: "lava-lamp", position: { x: 0.5, y: 0.25 } }],
+        videos: [{ id: "video-runner", position: null }],
         helpers: { monkey: 1, robot: 2, factory: 3 },
         levels: { crit: 2 },
       }),
@@ -175,7 +208,7 @@ describe("game-persistence: Versioned save format", () => {
     const storage = createMemoryStorage();
     expect(saveGame(storage, S({ balance: 5, totalClicks: 5 }))).toBe(true);
     expect(JSON.parse(storage.getItem("dopamine-clicker:save") as string)).toStrictEqual({
-      version: 3,
+      version: 4,
       state: S({ balance: 5, totalClicks: 5 }),
     });
     expect([...storage.data.keys()]).toEqual(["dopamine-clicker:save"]);
@@ -206,6 +239,10 @@ describe("game-persistence: Versioned save format", () => {
         { id: "sleeping-cat", position: { x: 0.125, y: 0.5 } },
         { id: "lava-lamp", position: null },
         { id: "hydraulic-press", position: { x: 0.75, y: 0.0625 } },
+      ],
+      videos: [
+        { id: "video-runner", position: { x: 0.25, y: 0.75 } },
+        { id: "video-rain", position: null },
       ],
       upgrades: ["double-click", "triple-click", "combo", "golden-button"],
       helpers: { monkey: 7, robot: 2, factory: 1 },
@@ -284,6 +321,63 @@ describe("game-persistence: State validation", () => {
     expect(validateGameState(input)).toStrictEqual(input);
   });
 
+  it("Valid video field accepted", () => {
+    const input = S({
+      totalClicks: 30000,
+      videos: [
+        { id: "video-runner", position: { x: 0, y: 1 } },
+        { id: "video-rain", position: null },
+      ],
+    });
+    expect(validateGameState(input)).toStrictEqual(input);
+  });
+
+  it("Videos are normalized like decor", () => {
+    const input = {
+      ...S({ totalClicks: 30000 }),
+      videos: [
+        { id: "video-rain", position: null, muted: true },
+        { id: "video-runner", position: { x: 0.5, y: 0.5, z: 1 } },
+      ],
+      achievements: ["first-click"],
+      stats: { crits: 3 },
+    };
+    const result = validateGameState(input);
+    expect(result).toStrictEqual(
+      S({
+        totalClicks: 30000,
+        videos: [
+          { id: "video-runner", position: { x: 0.5, y: 0.5 } },
+          { id: "video-rain", position: null },
+        ],
+      }),
+    );
+    expect(result).not.toHaveProperty("achievements");
+    expect(result).not.toHaveProperty("stats");
+  });
+
+  it.each([
+    ["videos undefined", { ...FRESH, videos: undefined }],
+    ["videos not an array", { ...FRESH, videos: {} }],
+    ["video entry is a string", { ...FRESH, videos: ["video-runner"] }],
+    ["unknown video", { ...FRESH, videos: [{ id: "video-nope", position: null }] }],
+    [
+      "duplicate video",
+      {
+        ...FRESH,
+        videos: [
+          { id: "video-runner", position: null },
+          { id: "video-runner", position: null },
+        ],
+      },
+    ],
+    ["video without position", { ...FRESH, videos: [{ id: "video-runner" }] }],
+    ["video x above 1", { ...FRESH, videos: [{ id: "video-runner", position: { x: 1.5, y: 0 } }] }],
+    ["video x string", { ...FRESH, videos: [{ id: "video-runner", position: { x: "0.5", y: 0 } }] }],
+  ])("Invalid video fields rejected: %s", (_label, value) => {
+    expect(validateGameState(value)).toBeNull();
+  });
+
   it.each([
     ["null", null],
     ["42", 42],
@@ -292,6 +386,7 @@ describe("game-persistence: State validation", () => {
     ["{}", {}],
     ["v1 payload", { balance: 0, totalClicks: 0 }],
     ["v2 payload", S2({})],
+    ["v3 payload without videos", S3({})],
     ["balance undefined", { ...FRESH, balance: undefined }],
     ["totalClicks undefined", { ...FRESH, totalClicks: undefined }],
     ["negative balance", { ...FRESH, balance: -1 }],
@@ -413,6 +508,7 @@ describe("game-persistence: Loading with fallback", () => {
     '{"version":1,"state":{"balance":-5,"totalClicks":1}}',
     '{"version":2,"state":{"balance":10,"totalClicks":10}}',
     '{"version":3,"state":{"balance":10,"totalClicks":10}}',
+    '{"version":4,"state":{"balance":10,"totalClicks":10}}',
   ])("Corrupted raw values: %j", (raw) => {
     expect(parseSave(raw)).toStrictEqual({ state: FRESH, status: "corrupted" });
   });
@@ -422,7 +518,7 @@ describe("game-persistence: Loading with fallback", () => {
   });
 
   it("Future version falls back", () => {
-    const raw = JSON.stringify({ version: 4, state: S({ balance: 10, totalClicks: 10 }) });
+    const raw = JSON.stringify({ version: 5, state: S({ balance: 10, totalClicks: 10 }) });
     expect(parseSave(raw)).toStrictEqual({ state: FRESH, status: "corrupted" });
   });
 
@@ -440,7 +536,7 @@ describe("game-persistence: Loading with fallback", () => {
       upgrades: ["double-click", "combo"],
       levels: { crit: 1 },
     });
-    expect(parseSave(V3(state))).toStrictEqual({ state, status: "loaded" });
+    expect(parseSave(V4(state))).toStrictEqual({ state, status: "loaded" });
   });
 
   it("Loading does not read or change theme and language keys", () => {
@@ -474,7 +570,7 @@ describe("game-persistence: Corrupted-save backup", () => {
   });
 
   it("Future version is backed up", () => {
-    const raw = '{"version":4,"state":{"balance":10,"totalClicks":10}}';
+    const raw = '{"version":5,"state":{"balance":10,"totalClicks":10}}';
     const storage = createMemoryStorage({ "dopamine-clicker:save": raw });
     expect(loadGame(storage).status).toBe("corrupted");
     expect(storage.getItem("dopamine-clicker:save:bad")).toBe(raw);
@@ -506,19 +602,23 @@ describe("game-persistence: Corrupted-save backup", () => {
   it("No backup for fresh, loaded or migrated", () => {
     const a = createMemoryStorage();
     const b = createMemoryStorage({
-      "dopamine-clicker:save": V3(S({ balance: 3, totalClicks: 3 })),
+      "dopamine-clicker:save": V4(S({ balance: 3, totalClicks: 3 })),
     });
     const c = createMemoryStorage({ "dopamine-clicker:save": RAW_V1(3, 3) });
     const d = createMemoryStorage({
       "dopamine-clicker:save": V2(S2({ balance: 3, totalClicks: 3 })),
+    });
+    const e = createMemoryStorage({
+      "dopamine-clicker:save": V3(S3({ balance: 3, totalClicks: 3 })),
     });
     expect([
       loadGame(a).status,
       loadGame(b).status,
       loadGame(c).status,
       loadGame(d).status,
-    ]).toEqual(["fresh", "loaded", "migrated", "migrated"]);
-    for (const storage of [a, b, c, d]) {
+      loadGame(e).status,
+    ]).toEqual(["fresh", "loaded", "migrated", "migrated", "migrated"]);
+    for (const storage of [a, b, c, d, e]) {
       expect(storage.getItem("dopamine-clicker:save:bad")).toBeNull();
     }
   });
@@ -526,7 +626,7 @@ describe("game-persistence: Corrupted-save backup", () => {
   it("Existing backup untouched by a valid load", () => {
     const storage = createMemoryStorage({
       "dopamine-clicker:save:bad": "old",
-      "dopamine-clicker:save": V3(S({ balance: 3, totalClicks: 3 })),
+      "dopamine-clicker:save": V4(S({ balance: 3, totalClicks: 3 })),
     });
     expect(loadGame(storage).status).toBe("loaded");
     expect(storage.getItem("dopamine-clicker:save:bad")).toBe("old");
@@ -557,9 +657,10 @@ describe("game-persistence: Corrupted-save backup", () => {
 
 describe("game-persistence: Migration hook", () => {
   it("Built-in table", () => {
-    expect(Object.keys(MIGRATIONS)).toEqual(["1", "2"]);
+    expect(Object.keys(MIGRATIONS)).toEqual(["1", "2", "3"]);
     expect(MIGRATIONS[1]).toBe(migrateV1ToV2);
     expect(MIGRATIONS[2]).toBe(migrateV2ToV3);
+    expect(MIGRATIONS[3]).toBe(migrateV3ToV4);
   });
 
   it("Same version passes through unchanged", () => {
@@ -608,7 +709,7 @@ describe("game-persistence: Migration hook", () => {
   });
 
   it("Newer than target fails", () => {
-    expect(migrateSave({ version: 4, state: { balance: 0, totalClicks: 0 } }, {}, 3)).toBeNull();
+    expect(migrateSave({ version: 5, state: { balance: 0, totalClicks: 0 } }, {}, 4)).toBeNull();
   });
 
   it("Migrated load reports status migrated", () => {
@@ -694,7 +795,7 @@ describe("game-persistence: Stage 2 saves migrate to v3", () => {
         }),
       ),
     ).toStrictEqual(
-      S({
+      S3({
         balance: 7,
         totalClicks: 900,
         ownedSkins: ["squish", "gold"],
@@ -714,14 +815,14 @@ describe("game-persistence: Stage 2 saves migrate to v3", () => {
       helpers: { monkey: 2, robot: 5 },
       levels: { crit: 3 },
     });
-    expect(result).toStrictEqual(S({ helpers: { monkey: 2 } }));
+    expect(result).toStrictEqual(S3({ helpers: { monkey: 2 } }));
     expect(result).not.toHaveProperty("foo");
   });
 
   it("Values are passed through for later validation", () => {
-    expect(migrateV2ToV3({ ...S2({}), balance: -5 })).toStrictEqual({ ...FRESH, balance: -5 });
+    expect(migrateV2ToV3({ ...S2({}), balance: -5 })).toStrictEqual({ ...S3({}), balance: -5 });
     expect(migrateV2ToV3({ ...S2({}), helpers: null })).toStrictEqual({
-      ...FRESH,
+      ...S3({}),
       helpers: null,
     });
   });
@@ -767,13 +868,125 @@ describe("game-persistence: Stage 2 saves migrate to v3", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Stage 3 saves migrate to v4
+// ---------------------------------------------------------------------------
+
+describe("game-persistence: Stage 3 saves migrate to v4", () => {
+  it("Migrate a v3 payload", () => {
+    expect(
+      migrateV3ToV4(
+        S3({
+          balance: 7,
+          totalClicks: 900,
+          ownedSkins: ["squish", "gold"],
+          enabledSkins: ["squish"],
+          material: "gold",
+          decor: [{ id: "lava-lamp", position: { x: 0.8, y: 0.1 } }],
+          upgrades: ["double-click", "combo"],
+          helpers: { monkey: 3, robot: 1 },
+          levels: { crit: 2 },
+        }),
+      ),
+    ).toStrictEqual(
+      S({
+        balance: 7,
+        totalClicks: 900,
+        ownedSkins: ["squish", "gold"],
+        enabledSkins: ["squish"],
+        material: "gold",
+        decor: [{ id: "lava-lamp", position: { x: 0.8, y: 0.1 } }],
+        upgrades: ["double-click", "combo"],
+        helpers: { monkey: 3, robot: 1 },
+        levels: { crit: 2 },
+      }),
+    );
+  });
+
+  it("Extra v3 keys are dropped and videos start empty", () => {
+    const result = migrateV3ToV4({
+      ...S3({}),
+      foo: 1,
+      videos: [{ id: "video-runner", position: null }],
+      achievements: ["first-click"],
+      stats: { crits: 9 },
+    });
+    expect(result).toStrictEqual(FRESH);
+    expect(result).not.toHaveProperty("foo");
+    expect(result).not.toHaveProperty("achievements");
+    expect(result).not.toHaveProperty("stats");
+  });
+
+  it("Values are passed through for later validation", () => {
+    expect(migrateV3ToV4({ ...S3({}), balance: -5 })).toStrictEqual({ ...FRESH, balance: -5 });
+    expect(migrateV3ToV4({ ...S3({}), levels: null })).toStrictEqual({ ...FRESH, levels: null });
+  });
+
+  it("Non-object payloads are returned unchanged", () => {
+    const A = [1];
+    expect(migrateV3ToV4(null)).toBeNull();
+    expect(migrateV3ToV4(42)).toBe(42);
+    expect(migrateV3ToV4("x")).toBe("x");
+    expect(migrateV3ToV4(A)).toBe(A);
+  });
+
+  it("v3 save loads as migrated", () => {
+    expect(
+      parseSave(
+        V3(
+          S3({
+            balance: 12,
+            totalClicks: 9000,
+            upgrades: ["combo"],
+            helpers: { robot: 2 },
+            levels: { crit: 3, "speed-robot": 1 },
+          }),
+        ),
+      ),
+    ).toStrictEqual({
+      state: S({
+        balance: 12,
+        totalClicks: 9000,
+        upgrades: ["combo"],
+        helpers: { robot: 2 },
+        levels: { crit: 3, "speed-robot": 1 },
+      }),
+      status: "migrated",
+    });
+  });
+
+  it("Invalid v3 save is corrupted", () => {
+    expect(parseSave(V3(S3({ totalClicks: 250, upgrades: ["triple-click"] })))).toStrictEqual({
+      state: FRESH,
+      status: "corrupted",
+    });
+  });
+
+  it("Loading a v3 save does not rewrite it", () => {
+    const raw = V3(S3({ balance: 40, totalClicks: 70 }));
+    const storage = createMemoryStorage({ "dopamine-clicker:save": raw });
+    expect(loadGame(storage).status).toBe("migrated");
+    expect(storage.getItem("dopamine-clicker:save")).toBe(raw);
+    expect(storage.getItem("dopamine-clicker:save:bad")).toBeNull();
+  });
+
+  it("A v4 save is loaded as is", () => {
+    const state = S({
+      balance: 5,
+      totalClicks: 5,
+      videos: [{ id: "video-runner", position: null }],
+    });
+    expect(parseSave(V4(state))).toStrictEqual({ state, status: "loaded" });
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Reset progress
 // ---------------------------------------------------------------------------
 
 describe("game-persistence: Reset progress with confirmation", () => {
   it("Clear removes only the save key", () => {
     const storage = createMemoryStorage({
-      "dopamine-clicker:save": V3(S({ balance: 3, totalClicks: 3 })),
+      "dopamine-clicker:save": V4(S({ balance: 3, totalClicks: 3 })),
       "dopamine-clicker:save:bad": "{not json",
       "dopamine-clicker:theme": "dark",
       "dopamine-clicker:lang": "en",

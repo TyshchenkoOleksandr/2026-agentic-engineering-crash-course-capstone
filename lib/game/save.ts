@@ -23,6 +23,7 @@ import type {
   MigrateSave,
   MigrateV1ToV2,
   MigrateV2ToV3,
+  MigrateV3ToV4,
   MigrationTable,
   ParseSave,
   SaveBackupKey,
@@ -35,7 +36,7 @@ import type {
 
 export const SAVE_KEY: SaveKey = "dopamine-clicker:save";
 export const SAVE_BACKUP_KEY: SaveBackupKey = "dopamine-clicker:save:bad";
-export const CURRENT_SAVE_VERSION: CurrentSaveVersion = 3;
+export const CURRENT_SAVE_VERSION: CurrentSaveVersion = 4;
 
 /** Built-in MIGRATIONS[1]: v1 payload -> v2 payload with default shop fields (design, Migration Plan). */
 export const migrateV1ToV2: MigrateV1ToV2 = (state) => {
@@ -78,31 +79,24 @@ export const migrateV2ToV3: MigrateV2ToV3 = (state) => {
   };
 };
 
+/** Built-in MIGRATIONS[3]: v3 payload -> v4 payload (adds `videos: []`, nothing else; design D11). */
+export const migrateV3ToV4: MigrateV3ToV4 = () => {
+  // Stage 4 stub (task 0.3): implemented in task 1.8.
+  throw new Error("not implemented");
+};
+
 /** Built-in migration table, keyed by source version. */
 export const MIGRATIONS: MigrationTable = Object.freeze({
   1: migrateV1ToV2,
   2: migrateV2ToV3,
+  3: migrateV3ToV4,
 });
 
-/** v3 envelope writer: exactly the schema keys, no runtime values (design D2, D14). */
-export const serializeGame: SerializeGame = (state) =>
-  JSON.stringify({
-    version: CURRENT_SAVE_VERSION,
-    state: {
-      balance: state.balance,
-      totalClicks: state.totalClicks,
-      ownedSkins: state.ownedSkins,
-      enabledSkins: state.enabledSkins,
-      material: state.material,
-      decor: state.decor.map((entry) => ({
-        id: entry.id,
-        position: entry.position === null ? null : { x: entry.position.x, y: entry.position.y },
-      })),
-      upgrades: state.upgrades,
-      helpers: pickHelpers(state.helpers),
-      levels: pickLevels(state.levels),
-    },
-  });
+/** v4 envelope writer: exactly the ten schema keys, no runtime values (design D2, D11). */
+export const serializeGame: SerializeGame = () => {
+  // Stage 4 stub (task 0.3): implemented in task 1.8 (the ten v4 keys incl. `videos`).
+  throw new Error("not implemented");
+};
 
 // Known ids in catalog order: the validator both checks against them and sorts by them (D13).
 const SKIN_IDS: readonly SkinId[] = SHOP_CATALOG.filter(
@@ -227,53 +221,11 @@ function normalizeLevels(
   return pickLevels(value as unknown as Record<LeveledUpgradeId, number>);
 }
 
-/** v3 validator with normalization (design D15). */
-export const validateGameState: ValidateGameState = (value) => {
-  if (!isRecord(value) || !isCount(value.balance) || !isCount(value.totalClicks)) {
-    return null;
-  }
-
-  const ownedSkins = normalizeIds(value.ownedSkins, SKIN_IDS);
-  const enabledSkins = normalizeIds(value.enabledSkins, STACK_SKIN_IDS);
-  const decor = normalizeDecor(value.decor);
-  const upgrades = normalizeIds(value.upgrades, UPGRADE_IDS);
-  if (ownedSkins === null || enabledSkins === null || decor === null || upgrades === null) {
-    return null;
-  }
-  if (!enabledSkins.every((id) => ownedSkins.includes(id))) {
-    return null;
-  }
-
-  const material = value.material;
-  const materialOwned = material === "classic" || ownedSkins.includes(material as SkinId);
-  if ((material !== "classic" && material !== "gold") || !materialOwned) {
-    return null;
-  }
-
-  if (upgrades.includes("triple-click") && !upgrades.includes("double-click")) {
-    return null;
-  }
-
-  const helpers = normalizeHelpers(value.helpers);
-  if (helpers === null) {
-    return null;
-  }
-  const levels = normalizeLevels(value.levels, helpers);
-  if (levels === null) {
-    return null;
-  }
-
-  return {
-    balance: value.balance,
-    totalClicks: value.totalClicks,
-    ownedSkins,
-    enabledSkins,
-    material,
-    decor,
-    upgrades,
-    helpers,
-    levels,
-  };
+/** v4 validator with normalization (design D11, D15). */
+export const validateGameState: ValidateGameState = () => {
+  // Stage 4 stub (task 0.3): implemented in task 1.8, including the `videos` rules and the
+  // dropping of a stray `achievements` / `stats` key.
+  throw new Error("not implemented");
 };
 
 export const migrateSave: MigrateSave = (file, migrations, targetVersion) => {

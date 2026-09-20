@@ -29,6 +29,7 @@ function S({ helpers, levels, ...rest }: StateOverrides = {}): GameState {
     enabledSkins: [],
     material: "classic",
     decor: [],
+    videos: [],
     upgrades: [],
     ...rest,
     helpers: { monkey: 0, robot: 0, factory: 0, ...helpers },

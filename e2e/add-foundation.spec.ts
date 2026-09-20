@@ -122,7 +122,7 @@ test.describe("game-persistence", () => {
 
     const rawSave = await getLocalStorageItem(page, SAVE_KEY);
     expect(rawSave ? JSON.parse(rawSave) : null).toEqual({
-      version: 3,
+      version: 4,
       state: {
         balance: 1,
         totalClicks: 1,
@@ -130,6 +130,7 @@ test.describe("game-persistence", () => {
         enabledSkins: [],
         material: "classic",
         decor: [],
+        videos: [],
         upgrades: [],
         helpers: { monkey: 0, robot: 0, factory: 0 },
         levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
@@ -149,7 +150,7 @@ test.describe("game-persistence", () => {
 
     const rawSave = await getLocalStorageItem(page, SAVE_KEY);
     expect(rawSave ? JSON.parse(rawSave) : null).toEqual({
-      version: 3,
+      version: 4,
       state: {
         balance: 5,
         totalClicks: 5,
@@ -157,6 +158,7 @@ test.describe("game-persistence", () => {
         enabledSkins: [],
         material: "classic",
         decor: [],
+        videos: [],
         upgrades: [],
         helpers: { monkey: 0, robot: 0, factory: 0 },
         levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },

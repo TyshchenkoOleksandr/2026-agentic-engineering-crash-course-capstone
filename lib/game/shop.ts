@@ -14,6 +14,7 @@ import type {
   ShopItemId,
   StackSkinId,
 } from "./types";
+import { VIDEO_DECOR, VIDEO_SIZE } from "./videos";
 
 /** The shop box appears once `totalClicks >= SHOP_UNLOCK_CLICKS` (specs/shop). */
 export const SHOP_UNLOCK_CLICKS = 10;
@@ -21,9 +22,23 @@ export const SHOP_UNLOCK_CLICKS = 10;
 /** Growth factor of repeatable prices: `round(base × 1.15^owned)` (design D6). */
 export const PRICE_GROWTH = 1.15;
 
+/** Video prices and reveal thresholds, in `VIDEO_DECOR` order (design D4). */
+const VIDEO_PRICES: readonly { readonly price: number; readonly revealAt: number }[] = [
+  { price: 5000, revealAt: 3000 },
+  { price: 7500, revealAt: 4500 },
+  { price: 10000, revealAt: 6000 },
+  { price: 12500, revealAt: 7500 },
+  { price: 15000, revealAt: 9000 },
+  { price: 20000, revealAt: 12000 },
+  { price: 25000, revealAt: 15000 },
+  { price: 30000, revealAt: 18000 },
+  { price: 40000, revealAt: 24000 },
+  { price: 50000, revealAt: 30000 },
+];
+
 /**
- * Stage 3 catalog in display order; also the canonical order of every array in GameState
- * (add-shop-v1 design D5, add-upgrades-v2 design D6).
+ * Stage 4 catalog in display order; also the canonical order of every array in GameState
+ * (add-shop-v1 design D5, add-upgrades-v2 design D6, design D4).
  */
 export const SHOP_CATALOG: readonly ShopItem[] = Object.freeze([
   { kind: "skin", id: "soft-shadow", category: "skins", slot: "stack", price: 15, revealAt: 10 },
@@ -145,6 +160,14 @@ export const SHOP_CATALOG: readonly ShopItem[] = Object.freeze([
     price: 120000,
     revealAt: 75000,
   },
+  ...VIDEO_DECOR.map((entry, index) => ({
+    kind: "video-decor" as const,
+    id: entry.id,
+    category: "video" as const,
+    size: VIDEO_SIZE,
+    price: VIDEO_PRICES[index].price,
+    revealAt: VIDEO_PRICES[index].revealAt,
+  })),
 ]);
 
 /** Catalog position of every id; the canonical order of every array in GameState. */
@@ -201,6 +224,9 @@ function isOwned(state: GameState, item: ShopItem): boolean {
       return state.ownedSkins.includes(item.id);
     case "decor":
       return state.decor.some((entry) => entry.id === item.id);
+    case "video-decor":
+      // Stage 4 stub (task 0.3): implemented in task 1.7 via `state.videos`.
+      throw new Error("not implemented");
     case "click-upgrade":
       return state.upgrades.includes(item.id);
     case "feature-upgrade":
@@ -278,6 +304,9 @@ export const buyItem: BuyItem = (state, id, options) => {
           ),
         },
       };
+    case "video-decor":
+      // Stage 4 stub (task 0.3): implemented in task 1.7 (adds to `videos` in catalog order).
+      throw new Error("not implemented");
     case "click-upgrade":
       return {
         ok: true,

@@ -30,6 +30,7 @@ function fresh(): GameState {
     enabledSkins: [],
     material: "classic",
     decor: [],
+    videos: [],
     upgrades: [],
     helpers: { monkey: 0, robot: 0, factory: 0 },
     levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
