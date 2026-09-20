@@ -155,7 +155,8 @@ automation is visible.
 2. **Shop v1:** shop unlock at 10, first skins (shadow, squish, +N, jumping cap, gold), 3 decor items
    (sleeping cat, lava lamp, hydraulic press), Double / Triple click, Monkey.
 3. **Upgrades v2:** Crit with its visual feedback, Combo, Golden button, Robot, Factory, speed-ups.
-4. **Content:** remaining skins, sound packs and decor.
+4. ~~**Content:** remaining skins, sound packs and decor.~~ — dropped on 2026-09-20; the project ends
+   with stage 3. Stages 1-2 are implemented and archived (`add-foundation`, `add-shop-v1`).
 
 Each stage becomes its own OpenSpec change with tests written first.
 
