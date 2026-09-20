@@ -5,6 +5,7 @@ import {
   loadGame,
   migrateSave,
   migrateV1ToV2,
+  migrateV2ToV3,
   MIGRATIONS,
   parseSave,
   SAVE_BACKUP_KEY,
@@ -13,11 +14,20 @@ import {
   serializeGame,
   validateGameState,
 } from "./save";
-import type { GameState, KeyValueStorage, MigrationTable, ParseSaveOptions } from "./types";
+import type {
+  GameState,
+  GameStateV2,
+  HelperId,
+  KeyValueStorage,
+  LeveledUpgradeId,
+  MigrationTable,
+  ParseSaveOptions,
+} from "./types";
 
 // ---------------------------------------------------------------------------
-// Fakes and notation (openspec/changes/add-shop-v1/design.md: FRESH, S({...}), V2(...);
-// specs/game-persistence: RAW_V1(b, t))
+// Fakes and notation (openspec/changes/add-upgrades-v2/design.md: FRESH, S({...}) with
+// merged `helpers` / `levels`, S2({...}), V2(...), V3(...); specs/game-persistence:
+// RAW_V1(b, t), L0)
 // ---------------------------------------------------------------------------
 
 interface FakeStorage extends KeyValueStorage {
@@ -51,6 +61,11 @@ function createThrowingStorage(overrides: Partial<KeyValueStorage> = {}): KeyVal
   };
 }
 
+type StateOverrides = Partial<Omit<GameState, "helpers" | "levels">> & {
+  readonly helpers?: Partial<Record<HelperId, number>>;
+  readonly levels?: Partial<Record<LeveledUpgradeId, number>>;
+};
+
 function fresh(): GameState {
   return {
     balance: 0,
@@ -60,18 +75,47 @@ function fresh(): GameState {
     material: "classic",
     decor: [],
     upgrades: [],
-    helpers: { monkey: 0 },
+    helpers: { monkey: 0, robot: 0, factory: 0 },
+    levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
   };
 }
 
 const FRESH: GameState = fresh();
 
-function S(overrides: Partial<GameState> = {}): GameState {
-  return { ...fresh(), ...overrides };
+/** `L0` of the spec notation: the fresh level map. */
+const L0 = FRESH.levels;
+
+function S({ helpers, levels, ...rest }: StateOverrides = {}): GameState {
+  const base = fresh();
+  return {
+    ...base,
+    ...rest,
+    helpers: { ...base.helpers, ...helpers },
+    levels: { ...base.levels, ...levels },
+  };
 }
 
-function V2(state: GameState): string {
+/** The Stage 2 (v2) payload shape; no merging of `helpers` (design notation S2). */
+function S2(overrides: Partial<GameStateV2> = {}): GameStateV2 {
+  return {
+    balance: 0,
+    totalClicks: 0,
+    ownedSkins: [],
+    enabledSkins: [],
+    material: "classic",
+    decor: [],
+    upgrades: [],
+    helpers: { monkey: 0 },
+    ...overrides,
+  };
+}
+
+function V2(state: GameStateV2): string {
   return JSON.stringify({ version: 2, state });
+}
+
+function V3(state: GameState): string {
+  return JSON.stringify({ version: 3, state });
 }
 
 function RAW_V1(balance: number, totalClicks: number): string {
@@ -90,26 +134,40 @@ describe("game-persistence: Versioned save format", () => {
   it("Constants", () => {
     expect(SAVE_KEY).toBe("dopamine-clicker:save");
     expect(SAVE_BACKUP_KEY).toBe("dopamine-clicker:save:bad");
-    expect(CURRENT_SAVE_VERSION).toBe(2);
+    expect(CURRENT_SAVE_VERSION).toBe(3);
   });
 
   it("Serialize state", () => {
     expect(JSON.parse(serializeGame(S({ balance: 12, totalClicks: 30 })))).toStrictEqual({
-      version: 2,
+      version: 3,
       state: S({ balance: 12, totalClicks: 30 }),
     });
   });
 
   it("Serialize writes only schema fields", () => {
-    const fields: Partial<GameState> = {
-      balance: 1,
-      totalClicks: 1,
-      decor: [{ id: "lava-lamp", position: { x: 0.5, y: 0.25 } }],
-    };
-    const withRuntime = { ...S(fields), carry: 400, savedAt: 123 } as unknown as GameState;
+    const withRuntime = {
+      ...S({
+        balance: 1,
+        totalClicks: 1,
+        decor: [{ id: "lava-lamp", position: { x: 0.5, y: 0.25 } }],
+      }),
+      carry: 400,
+      clickCarry: 0.5,
+      savedAt: 123,
+      combo: { level: 3, lastClickAt: 5 },
+      golden: { nextSpawnMs: 0, visible: null, bonusMs: 1000 },
+      helpers: { monkey: 1, robot: 2, factory: 3, extra: 4 },
+      levels: { ...L0, crit: 2, bonus: 1 },
+    } as unknown as GameState;
     expect(JSON.parse(serializeGame(withRuntime))).toStrictEqual({
-      version: 2,
-      state: S(fields),
+      version: 3,
+      state: S({
+        balance: 1,
+        totalClicks: 1,
+        decor: [{ id: "lava-lamp", position: { x: 0.5, y: 0.25 } }],
+        helpers: { monkey: 1, robot: 2, factory: 3 },
+        levels: { crit: 2 },
+      }),
     });
   });
 
@@ -117,7 +175,7 @@ describe("game-persistence: Versioned save format", () => {
     const storage = createMemoryStorage();
     expect(saveGame(storage, S({ balance: 5, totalClicks: 5 }))).toBe(true);
     expect(JSON.parse(storage.getItem("dopamine-clicker:save") as string)).toStrictEqual({
-      version: 2,
+      version: 3,
       state: S({ balance: 5, totalClicks: 5 }),
     });
     expect([...storage.data.keys()]).toEqual(["dopamine-clicker:save"]);
@@ -140,7 +198,7 @@ describe("game-persistence: Versioned save format", () => {
   it("Round trip", () => {
     const F = S({
       balance: 1234,
-      totalClicks: 2000,
+      totalClicks: 90000,
       ownedSkins: ["soft-shadow", "squish", "floating-number", "jumping-cap", "gold"],
       enabledSkins: ["squish", "jumping-cap"],
       material: "gold",
@@ -149,8 +207,9 @@ describe("game-persistence: Versioned save format", () => {
         { id: "lava-lamp", position: null },
         { id: "hydraulic-press", position: { x: 0.75, y: 0.0625 } },
       ],
-      upgrades: ["double-click", "triple-click"],
-      helpers: { monkey: 7 },
+      upgrades: ["double-click", "triple-click", "combo", "golden-button"],
+      helpers: { monkey: 7, robot: 2, factory: 1 },
+      levels: { crit: 2, "speed-monkey": 3, "speed-robot": 1, "speed-factory": 0 },
     });
     const storage = createMemoryStorage();
     saveGame(storage, F);
@@ -175,16 +234,23 @@ describe("game-persistence: State validation", () => {
 
   it("Normalization", () => {
     const input = {
-      ...S({ totalClicks: 300 }),
-      ownedSkins: ["gold", "jumping-cap", "soft-shadow"],
-      enabledSkins: ["jumping-cap", "soft-shadow"],
-      material: "gold",
+      ...S({
+        totalClicks: 300,
+        ownedSkins: ["gold", "jumping-cap", "soft-shadow"],
+        enabledSkins: ["jumping-cap", "soft-shadow"],
+        material: "gold",
+        decor: [
+          { id: "lava-lamp", position: { x: 0.5, y: 0.5 } },
+          { id: "sleeping-cat", position: null },
+        ],
+        upgrades: ["golden-button", "triple-click", "combo", "double-click"],
+      }),
       decor: [
         { id: "lava-lamp", position: { x: 0.5, y: 0.5, z: 1 } },
         { id: "sleeping-cat", position: null, hidden: true },
       ],
-      upgrades: ["triple-click", "double-click"],
-      helpers: { monkey: 2, robot: 5 },
+      helpers: { monkey: 2, robot: 1, factory: 0, cat: 5 },
+      levels: { ...L0, crit: 1, "speed-cat": 2 },
       extra: "x",
     };
     expect(validateGameState(input)).toStrictEqual(
@@ -197,14 +263,24 @@ describe("game-persistence: State validation", () => {
           { id: "sleeping-cat", position: null },
           { id: "lava-lamp", position: { x: 0.5, y: 0.5 } },
         ],
-        upgrades: ["double-click", "triple-click"],
-        helpers: { monkey: 2 },
+        upgrades: ["double-click", "triple-click", "combo", "golden-button"],
+        helpers: { monkey: 2, robot: 1 },
+        levels: { crit: 1 },
       }),
     );
   });
 
   it("Position bounds are inclusive", () => {
     const input = S({ decor: [{ id: "lava-lamp", position: { x: 0, y: 1 } }] });
+    expect(validateGameState(input)).toStrictEqual(input);
+  });
+
+  it("Maximum levels with owned helpers accepted", () => {
+    const input = S({
+      totalClicks: 100000,
+      helpers: { monkey: 1, robot: 1, factory: 1 },
+      levels: { crit: 3, "speed-monkey": 3, "speed-robot": 3, "speed-factory": 3 },
+    });
     expect(validateGameState(input)).toStrictEqual(input);
   });
 
@@ -215,6 +291,7 @@ describe("game-persistence: State validation", () => {
     ["[]", []],
     ["{}", {}],
     ["v1 payload", { balance: 0, totalClicks: 0 }],
+    ["v2 payload", S2({})],
     ["balance undefined", { ...FRESH, balance: undefined }],
     ["totalClicks undefined", { ...FRESH, totalClicks: undefined }],
     ["negative balance", { ...FRESH, balance: -1 }],
@@ -257,14 +334,46 @@ describe("game-persistence: State validation", () => {
     ["x NaN", { ...FRESH, decor: [{ id: "lava-lamp", position: { x: NaN, y: 0 } }] }],
     ["x string", { ...FRESH, decor: [{ id: "lava-lamp", position: { x: "0.5", y: 0 } }] }],
     ["triple without double", { ...FRESH, upgrades: ["triple-click"] }],
-    ["unknown upgrade", { ...FRESH, upgrades: ["crit"] }],
+    ["crit is a level, not an upgrade", { ...FRESH, upgrades: ["crit"] }],
+    ["speed-up is a level, not an upgrade", { ...FRESH, upgrades: ["speed-monkey"] }],
     ["duplicate upgrade", { ...FRESH, upgrades: ["double-click", "double-click"] }],
+    ["duplicate feature upgrade", { ...FRESH, upgrades: ["combo", "combo"] }],
     ["helpers null", { ...FRESH, helpers: null }],
     ["helpers array", { ...FRESH, helpers: [] }],
     ["helpers empty", { ...FRESH, helpers: {} }],
-    ["negative monkeys", { ...FRESH, helpers: { monkey: -1 } }],
-    ["fractional monkeys", { ...FRESH, helpers: { monkey: 1.5 } }],
+    ["v2 helpers", { ...FRESH, helpers: { monkey: 0 } }],
+    ["helpers without factory", { ...FRESH, helpers: { monkey: 0, robot: 0 } }],
+    ["negative monkeys", { ...FRESH, helpers: { monkey: -1, robot: 0, factory: 0 } }],
+    ["fractional monkeys", { ...FRESH, helpers: { monkey: 1.5, robot: 0, factory: 0 } }],
+    ["negative robots", { ...FRESH, helpers: { monkey: 0, robot: -1, factory: 0 } }],
+    ["string factories", { ...FRESH, helpers: { monkey: 0, robot: 0, factory: "1" } }],
   ])("Invalid shop fields rejected: %s", (_label, value) => {
+    expect(validateGameState(value)).toBeNull();
+  });
+
+  it.each([
+    ["levels undefined", { ...FRESH, levels: undefined }],
+    ["levels null", { ...FRESH, levels: null }],
+    ["levels array", { ...FRESH, levels: [] }],
+    ["levels empty", { ...FRESH, levels: {} }],
+    [
+      "missing level key",
+      { ...FRESH, levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0 } },
+    ],
+    ["crit above max", { ...FRESH, levels: { ...L0, crit: 4 } }],
+    ["crit negative", { ...FRESH, levels: { ...L0, crit: -1 } }],
+    ["crit fractional", { ...FRESH, levels: { ...L0, crit: 1.5 } }],
+    ["crit string", { ...FRESH, levels: { ...L0, crit: "1" } }],
+    ["speed-up without its helper", { ...FRESH, levels: { ...L0, "speed-monkey": 1 } }],
+    [
+      "speed-robot without robots",
+      {
+        ...FRESH,
+        helpers: { monkey: 1, robot: 0, factory: 0 },
+        levels: { ...L0, "speed-robot": 2 },
+      },
+    ],
+  ])("Invalid levels rejected: %s", (_label, value) => {
     expect(validateGameState(value)).toBeNull();
   });
 });
@@ -303,6 +412,7 @@ describe("game-persistence: Loading with fallback", () => {
     '{"version":"1","state":{"balance":1,"totalClicks":1}}',
     '{"version":1,"state":{"balance":-5,"totalClicks":1}}',
     '{"version":2,"state":{"balance":10,"totalClicks":10}}',
+    '{"version":3,"state":{"balance":10,"totalClicks":10}}',
   ])("Corrupted raw values: %j", (raw) => {
     expect(parseSave(raw)).toStrictEqual({ state: FRESH, status: "corrupted" });
   });
@@ -312,7 +422,7 @@ describe("game-persistence: Loading with fallback", () => {
   });
 
   it("Future version falls back", () => {
-    const raw = JSON.stringify({ version: 3, state: S({ balance: 10, totalClicks: 10 }) });
+    const raw = JSON.stringify({ version: 4, state: S({ balance: 10, totalClicks: 10 }) });
     expect(parseSave(raw)).toStrictEqual({ state: FRESH, status: "corrupted" });
   });
 
@@ -324,8 +434,13 @@ describe("game-persistence: Loading with fallback", () => {
   });
 
   it("Current version loads", () => {
-    const state = S({ balance: 4, totalClicks: 20, upgrades: ["double-click"] });
-    expect(parseSave(V2(state))).toStrictEqual({ state, status: "loaded" });
+    const state = S({
+      balance: 4,
+      totalClicks: 200,
+      upgrades: ["double-click", "combo"],
+      levels: { crit: 1 },
+    });
+    expect(parseSave(V3(state))).toStrictEqual({ state, status: "loaded" });
   });
 
   it("Loading does not read or change theme and language keys", () => {
@@ -359,7 +474,7 @@ describe("game-persistence: Corrupted-save backup", () => {
   });
 
   it("Future version is backed up", () => {
-    const raw = '{"version":3,"state":{"balance":10,"totalClicks":10}}';
+    const raw = '{"version":4,"state":{"balance":10,"totalClicks":10}}';
     const storage = createMemoryStorage({ "dopamine-clicker:save": raw });
     expect(loadGame(storage).status).toBe("corrupted");
     expect(storage.getItem("dopamine-clicker:save:bad")).toBe(raw);
@@ -390,22 +505,28 @@ describe("game-persistence: Corrupted-save backup", () => {
 
   it("No backup for fresh, loaded or migrated", () => {
     const a = createMemoryStorage();
-    const b = createMemoryStorage({ "dopamine-clicker:save": V2(S({ balance: 3, totalClicks: 3 })) });
+    const b = createMemoryStorage({
+      "dopamine-clicker:save": V3(S({ balance: 3, totalClicks: 3 })),
+    });
     const c = createMemoryStorage({ "dopamine-clicker:save": RAW_V1(3, 3) });
-    expect([loadGame(a).status, loadGame(b).status, loadGame(c).status]).toEqual([
-      "fresh",
-      "loaded",
-      "migrated",
-    ]);
-    expect(a.getItem("dopamine-clicker:save:bad")).toBeNull();
-    expect(b.getItem("dopamine-clicker:save:bad")).toBeNull();
-    expect(c.getItem("dopamine-clicker:save:bad")).toBeNull();
+    const d = createMemoryStorage({
+      "dopamine-clicker:save": V2(S2({ balance: 3, totalClicks: 3 })),
+    });
+    expect([
+      loadGame(a).status,
+      loadGame(b).status,
+      loadGame(c).status,
+      loadGame(d).status,
+    ]).toEqual(["fresh", "loaded", "migrated", "migrated"]);
+    for (const storage of [a, b, c, d]) {
+      expect(storage.getItem("dopamine-clicker:save:bad")).toBeNull();
+    }
   });
 
   it("Existing backup untouched by a valid load", () => {
     const storage = createMemoryStorage({
       "dopamine-clicker:save:bad": "old",
-      "dopamine-clicker:save": V2(S({ balance: 3, totalClicks: 3 })),
+      "dopamine-clicker:save": V3(S({ balance: 3, totalClicks: 3 })),
     });
     expect(loadGame(storage).status).toBe("loaded");
     expect(storage.getItem("dopamine-clicker:save:bad")).toBe("old");
@@ -436,8 +557,9 @@ describe("game-persistence: Corrupted-save backup", () => {
 
 describe("game-persistence: Migration hook", () => {
   it("Built-in table", () => {
-    expect(Object.keys(MIGRATIONS)).toEqual(["1"]);
+    expect(Object.keys(MIGRATIONS)).toEqual(["1", "2"]);
     expect(MIGRATIONS[1]).toBe(migrateV1ToV2);
+    expect(MIGRATIONS[2]).toBe(migrateV2ToV3);
   });
 
   it("Same version passes through unchanged", () => {
@@ -448,9 +570,9 @@ describe("game-persistence: Migration hook", () => {
   });
 
   it("One step", () => {
-    expect(
-      migrateSave({ version: 1, state: { balance: 3, totalClicks: 4 } }, addBonus, 2),
-    ).toEqual({ version: 2, state: { balance: 3, totalClicks: 4, bonus: 0 } });
+    expect(migrateSave({ version: 1, state: { balance: 3, totalClicks: 4 } }, addBonus, 2)).toEqual(
+      { version: 2, state: { balance: 3, totalClicks: 4, bonus: 0 } },
+    );
   });
 
   it("Chained steps run in order", () => {
@@ -461,16 +583,15 @@ describe("game-persistence: Migration hook", () => {
         return { ...prev, log: [...prev.log, "2to3"] };
       },
     };
-    expect(migrateSave({ version: 1, state: { balance: 0, totalClicks: 0 } }, table, 3)).toEqual(
-      { version: 3, state: { balance: 0, totalClicks: 0, log: ["1to2", "2to3"] } },
-    );
+    expect(migrateSave({ version: 1, state: { balance: 0, totalClicks: 0 } }, table, 3)).toEqual({
+      version: 3,
+      state: { balance: 0, totalClicks: 0, log: ["1to2", "2to3"] },
+    });
   });
 
   it("Missing step fails", () => {
     const table: MigrationTable = { 1: (s) => s };
-    expect(
-      migrateSave({ version: 1, state: { balance: 0, totalClicks: 0 } }, table, 3),
-    ).toBeNull();
+    expect(migrateSave({ version: 1, state: { balance: 0, totalClicks: 0 } }, table, 3)).toBeNull();
   });
 
   it("Throwing step fails", () => {
@@ -487,7 +608,7 @@ describe("game-persistence: Migration hook", () => {
   });
 
   it("Newer than target fails", () => {
-    expect(migrateSave({ version: 3, state: { balance: 0, totalClicks: 0 } }, {}, 2)).toBeNull();
+    expect(migrateSave({ version: 4, state: { balance: 0, totalClicks: 0 } }, {}, 3)).toBeNull();
   });
 
   it("Migrated load reports status migrated", () => {
@@ -514,22 +635,20 @@ describe("game-persistence: Migration hook", () => {
 describe("game-persistence: Stage 1 saves migrate to v2", () => {
   it("Migrate a v1 payload", () => {
     expect(migrateV1ToV2({ balance: 7, totalClicks: 9 })).toStrictEqual(
-      S({ balance: 7, totalClicks: 9 }),
+      S2({ balance: 7, totalClicks: 9 }),
     );
   });
 
   it("Extra v1 keys are dropped", () => {
     const result = migrateV1ToV2({ balance: 1, totalClicks: 2, foo: 3 });
-    expect(result).toStrictEqual(S({ balance: 1, totalClicks: 2 }));
+    expect(result).toStrictEqual(S2({ balance: 1, totalClicks: 2 }));
     expect(result).not.toHaveProperty("foo");
   });
 
   it("Values are passed through for later validation", () => {
-    expect(migrateV1ToV2({ balance: -5, totalClicks: 1 })).toStrictEqual({
-      ...FRESH,
-      balance: -5,
-      totalClicks: 1,
-    });
+    expect(migrateV1ToV2({ balance: -5, totalClicks: 1 })).toStrictEqual(
+      S2({ balance: -5, totalClicks: 1 }),
+    );
   });
 
   it("Non-object payloads are returned unchanged", () => {
@@ -556,13 +675,105 @@ describe("game-persistence: Stage 1 saves migrate to v2", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Stage 2 saves migrate to v3
+// ---------------------------------------------------------------------------
+
+describe("game-persistence: Stage 2 saves migrate to v3", () => {
+  it("Migrate a v2 payload", () => {
+    expect(
+      migrateV2ToV3(
+        S2({
+          balance: 7,
+          totalClicks: 900,
+          ownedSkins: ["squish", "gold"],
+          enabledSkins: ["squish"],
+          material: "gold",
+          decor: [{ id: "lava-lamp", position: { x: 0.8, y: 0.1 } }],
+          upgrades: ["double-click"],
+          helpers: { monkey: 3 },
+        }),
+      ),
+    ).toStrictEqual(
+      S({
+        balance: 7,
+        totalClicks: 900,
+        ownedSkins: ["squish", "gold"],
+        enabledSkins: ["squish"],
+        material: "gold",
+        decor: [{ id: "lava-lamp", position: { x: 0.8, y: 0.1 } }],
+        upgrades: ["double-click"],
+        helpers: { monkey: 3 },
+      }),
+    );
+  });
+
+  it("Extra v2 keys are dropped and new fields start at 0", () => {
+    const result = migrateV2ToV3({
+      ...S2({}),
+      foo: 1,
+      helpers: { monkey: 2, robot: 5 },
+      levels: { crit: 3 },
+    });
+    expect(result).toStrictEqual(S({ helpers: { monkey: 2 } }));
+    expect(result).not.toHaveProperty("foo");
+  });
+
+  it("Values are passed through for later validation", () => {
+    expect(migrateV2ToV3({ ...S2({}), balance: -5 })).toStrictEqual({ ...FRESH, balance: -5 });
+    expect(migrateV2ToV3({ ...S2({}), helpers: null })).toStrictEqual({
+      ...FRESH,
+      helpers: null,
+    });
+  });
+
+  it("Non-object payloads are returned unchanged", () => {
+    const A = [1];
+    expect(migrateV2ToV3(null)).toBeNull();
+    expect(migrateV2ToV3(42)).toBe(42);
+    expect(migrateV2ToV3("x")).toBe("x");
+    expect(migrateV2ToV3(A)).toBe(A);
+  });
+
+  it("v2 save loads as migrated", () => {
+    expect(
+      parseSave(
+        V2(S2({ balance: 12, totalClicks: 80, upgrades: ["double-click"], helpers: { monkey: 2 } })),
+      ),
+    ).toStrictEqual({
+      state: S({
+        balance: 12,
+        totalClicks: 80,
+        upgrades: ["double-click"],
+        helpers: { monkey: 2 },
+      }),
+      status: "migrated",
+    });
+  });
+
+  it("Invalid v2 save is corrupted", () => {
+    expect(parseSave(V2(S2({ totalClicks: 250, upgrades: ["triple-click"] })))).toStrictEqual({
+      state: FRESH,
+      status: "corrupted",
+    });
+  });
+
+  it("Loading a v2 save does not rewrite it", () => {
+    const raw = V2(S2({ balance: 40, totalClicks: 70 }));
+    const storage = createMemoryStorage({ "dopamine-clicker:save": raw });
+    expect(loadGame(storage).status).toBe("migrated");
+    expect(storage.getItem("dopamine-clicker:save")).toBe(raw);
+    expect(storage.getItem("dopamine-clicker:save:bad")).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Reset progress
 // ---------------------------------------------------------------------------
 
 describe("game-persistence: Reset progress with confirmation", () => {
   it("Clear removes only the save key", () => {
     const storage = createMemoryStorage({
-      "dopamine-clicker:save": V2(S({ balance: 3, totalClicks: 3 })),
+      "dopamine-clicker:save": V3(S({ balance: 3, totalClicks: 3 })),
       "dopamine-clicker:save:bad": "{not json",
       "dopamine-clicker:theme": "dark",
       "dopamine-clicker:lang": "en",

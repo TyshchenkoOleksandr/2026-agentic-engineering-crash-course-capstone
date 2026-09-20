@@ -1,11 +1,28 @@
 import { SHOP_CATALOG } from "./shop";
-import type { GetHelperClicksPerSecond, TickHelpers } from "./types";
+import type {
+  GetHelperClicksPerSecond,
+  GetHelperRate,
+  HelperId,
+  SpeedUpId,
+  TickHelpers,
+} from "./types";
 
 /** Interval of the single game tick in the page (design D16). */
 export const HELPER_TICK_MS = 100;
 
 /** Upper clamp of one tick's elapsed time: no catch-up bursts (design D3). */
 export const MAX_TICK_MS = 1000;
+
+/** Speed-up that doubles the rate of each helper type (design D14). */
+export const SPEED_UP_OF: Readonly<Record<HelperId, SpeedUpId>> = Object.freeze({
+  monkey: "speed-monkey",
+  robot: "speed-robot",
+  factory: "speed-factory",
+});
+
+export const getHelperRate: GetHelperRate = () => {
+  throw new Error("not implemented");
+};
 
 export const getHelperClicksPerSecond: GetHelperClicksPerSecond = (state) =>
   SHOP_CATALOG.reduce(

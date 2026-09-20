@@ -1,11 +1,17 @@
 import { describe, expect, it } from "vitest";
 import { NEUTRAL_CLICK_MODIFIERS } from "./click-value";
 import { clickMainButton, createInitialState, isBalanceVisible } from "./state";
-import type { GameState } from "./types";
+import type { GameState, HelperId, LeveledUpgradeId } from "./types";
 
 // ---------------------------------------------------------------------------
-// Helpers (notation from openspec/changes/add-shop-v1/design.md: FRESH, S({...}))
+// Helpers (notation from openspec/changes/add-upgrades-v2/design.md: FRESH, S({...}) with
+// `helpers` and `levels` shallow-merged into the FRESH defaults)
 // ---------------------------------------------------------------------------
+
+type StateOverrides = Partial<Omit<GameState, "helpers" | "levels">> & {
+  readonly helpers?: Partial<Record<HelperId, number>>;
+  readonly levels?: Partial<Record<LeveledUpgradeId, number>>;
+};
 
 function fresh(): GameState {
   return {
@@ -16,14 +22,21 @@ function fresh(): GameState {
     material: "classic",
     decor: [],
     upgrades: [],
-    helpers: { monkey: 0 },
+    helpers: { monkey: 0, robot: 0, factory: 0 },
+    levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
   };
 }
 
 const FRESH: GameState = fresh();
 
-function S(overrides: Partial<GameState> = {}): GameState {
-  return { ...fresh(), ...overrides };
+function S({ helpers, levels, ...rest }: StateOverrides = {}): GameState {
+  const base = fresh();
+  return {
+    ...base,
+    ...rest,
+    helpers: { ...base.helpers, ...helpers },
+    levels: { ...base.levels, ...levels },
+  };
 }
 
 function deepFreeze<T>(value: T): T {
@@ -50,7 +63,8 @@ describe("clicker-core: Initial game state", () => {
       material: "classic",
       decor: [],
       upgrades: [],
-      helpers: { monkey: 0 },
+      helpers: { monkey: 0, robot: 0, factory: 0 },
+      levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
     });
   });
 
@@ -63,6 +77,7 @@ describe("clicker-core: Initial game state", () => {
     expect(a.ownedSkins).not.toBe(b.ownedSkins);
     expect(a.decor).not.toBe(b.decor);
     expect(a.helpers).not.toBe(b.helpers);
+    expect(a.levels).not.toBe(b.levels);
   });
 });
 
@@ -94,8 +109,19 @@ describe("clicker-core: Main-button click updates balance and total clicks", () 
     ).toStrictEqual(S({ balance: 25, totalClicks: 6 }));
   });
 
+  it("Carry-free click floors a fractional value", () => {
+    expect(
+      clickMainButton(S({ balance: 5, totalClicks: 5 }), {
+        multiplier: 3,
+        combo: 1.5,
+        crit: false,
+        goldenBonus: 1,
+      }),
+    ).toStrictEqual(S({ balance: 9, totalClicks: 6 }));
+  });
+
   it("Other fields are copied unchanged", () => {
-    const fields: Partial<GameState> = {
+    const fields: StateOverrides = {
       ownedSkins: ["squish", "gold"],
       enabledSkins: ["squish"],
       material: "gold",

@@ -39,6 +39,19 @@ function S(overrides: Partial<SaveState> = {}): SaveState {
  * Seeds localStorage before the first navigation. Same guard as e2e/add-foundation.spec.ts:
  * `addInitScript` re-runs on every reload, so a `sessionStorage` flag makes seeding one-shot.
  */
+/**
+ * The same state as the v3 save schema writes it (add-upgrades-v2 design D20): `helpers` gains
+ * `robot` / `factory`, `levels` is new. Used only for expected save envelopes; seeding stays v2.
+ */
+function S3(overrides: Partial<SaveState> = {}) {
+  const base = S(overrides);
+  return {
+    ...base,
+    helpers: { monkey: base.helpers.monkey, robot: 0, factory: 0 },
+    levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
+  };
+}
+
 async function seedStorage(page: Page, values: Record<string, string>) {
   await page.addInitScript((entries) => {
     if (window.sessionStorage.getItem("__seeded")) {
@@ -219,7 +232,11 @@ test.describe("shop", () => {
         "shop-item-hydraulic-press",
         "shop-item-double-click",
         "shop-item-triple-click",
+        "shop-item-crit",
+        "shop-item-combo",
+        "shop-item-golden-button",
         "shop-item-monkey",
+        "shop-item-robot",
       ]);
   });
 
@@ -227,7 +244,7 @@ test.describe("shop", () => {
     await seedV2(page, S({ balance: 0, totalClicks: 749 }));
     await page.goto("/");
     await expect(page.getByTestId("shop")).toBeVisible();
-    await expect(page.locator('[data-testid^="shop-item-"]')).toHaveCount(10);
+    await expect(page.locator('[data-testid^="shop-item-"]')).toHaveCount(14);
     await expect(page.getByTestId("shop-item-hydraulic-press")).toHaveCount(0);
   });
 
@@ -261,8 +278,8 @@ test.describe("shop", () => {
     await expect
       .poll(() => readSave(page))
       .toEqual({
-        version: 2,
-        state: S({
+        version: 3,
+        state: S3({
           balance: 0,
           totalClicks: 15,
           ownedSkins: ["soft-shadow"],
@@ -738,6 +755,7 @@ test.describe("helpers", () => {
         "decor",
         "upgrades",
         "helpers",
+        "levels",
       ].sort(),
     );
   });
@@ -875,7 +893,7 @@ test.describe("game-persistence", () => {
     await page.getByTestId("main-button").click();
     await expect
       .poll(() => readSave(page))
-      .toEqual({ version: 2, state: S({ balance: 41, totalClicks: 13 }) });
+      .toEqual({ version: 3, state: S3({ balance: 41, totalClicks: 13 }) });
   });
 });
 

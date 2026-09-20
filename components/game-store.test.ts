@@ -1,5 +1,5 @@
 import { CURRENT_SAVE_VERSION, SAVE_KEY } from "@/lib/game/save";
-import type { GameState } from "@/lib/game/types";
+import type { GameState, HelperId, LeveledUpgradeId } from "@/lib/game/types";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   commitGame,
@@ -9,8 +9,14 @@ import {
   subscribeSavedState,
 } from "./game-store";
 
-// Notation from openspec/changes/add-shop-v1/design.md: S({...}) = FRESH with fields replaced.
-function S(overrides: Partial<GameState> = {}): GameState {
+type StateOverrides = Partial<Omit<GameState, "helpers" | "levels">> & {
+  readonly helpers?: Partial<Record<HelperId, number>>;
+  readonly levels?: Partial<Record<LeveledUpgradeId, number>>;
+};
+
+// Notation from openspec/changes/add-upgrades-v2/design.md: S({...}) = FRESH with fields
+// replaced, `helpers` and `levels` shallow-merged into their defaults.
+function S({ helpers, levels, ...rest }: StateOverrides = {}): GameState {
   return {
     balance: 0,
     totalClicks: 0,
@@ -19,8 +25,15 @@ function S(overrides: Partial<GameState> = {}): GameState {
     material: "classic",
     decor: [],
     upgrades: [],
-    helpers: { monkey: 0 },
-    ...overrides,
+    ...rest,
+    helpers: { monkey: 0, robot: 0, factory: 0, ...helpers },
+    levels: {
+      crit: 0,
+      "speed-monkey": 0,
+      "speed-robot": 0,
+      "speed-factory": 0,
+      ...levels,
+    },
   };
 }
 

@@ -1,10 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { getHelperClicksPerSecond, HELPER_TICK_MS, MAX_TICK_MS, tickHelpers } from "./helpers";
-import type { GameState, HelperTickResult } from "./types";
+import {
+  getHelperClicksPerSecond,
+  getHelperRate,
+  HELPER_TICK_MS,
+  MAX_TICK_MS,
+  SPEED_UP_OF,
+  tickHelpers,
+} from "./helpers";
+import type { GameState, HelperId, HelperTickResult, LeveledUpgradeId } from "./types";
 
 // ---------------------------------------------------------------------------
-// Helpers (notation from design.md: FRESH, S({...}))
+// Helpers (notation from design.md: FRESH, S({...}) with `helpers` and `levels`
+// shallow-merged into the FRESH defaults)
 // ---------------------------------------------------------------------------
+
+type StateOverrides = Partial<Omit<GameState, "helpers" | "levels">> & {
+  readonly helpers?: Partial<Record<HelperId, number>>;
+  readonly levels?: Partial<Record<LeveledUpgradeId, number>>;
+};
 
 function fresh(): GameState {
   return {
@@ -15,12 +28,19 @@ function fresh(): GameState {
     material: "classic",
     decor: [],
     upgrades: [],
-    helpers: { monkey: 0 },
+    helpers: { monkey: 0, robot: 0, factory: 0 },
+    levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
   };
 }
 
-function S(overrides: Partial<GameState> = {}): GameState {
-  return { ...fresh(), ...overrides };
+function S({ helpers, levels, ...rest }: StateOverrides = {}): GameState {
+  const base = fresh();
+  return {
+    ...base,
+    ...rest,
+    helpers: { ...base.helpers, ...helpers },
+    levels: { ...base.levels, ...levels },
+  };
 }
 
 function deepFreeze<T>(value: T): T {
@@ -47,9 +67,48 @@ describe("helpers: Helper income rate", () => {
   it("Upgrades do not boost helpers", () => {
     expect(
       getHelperClicksPerSecond(
-        S({ helpers: { monkey: 2 }, upgrades: ["double-click", "triple-click"] }),
+        S({
+          helpers: { monkey: 2 },
+          upgrades: ["double-click", "triple-click", "combo", "golden-button"],
+          levels: { crit: 3 },
+        }),
       ),
     ).toBe(2);
+  });
+
+  it("Speed-up map", () => {
+    expect(SPEED_UP_OF).toEqual({
+      monkey: "speed-monkey",
+      robot: "speed-robot",
+      factory: "speed-factory",
+    });
+  });
+
+  it("Rate per helper type", () => {
+    const H = S({ helpers: { monkey: 3, robot: 2, factory: 1 } });
+    expect(getHelperRate(H, "monkey")).toBe(3);
+    expect(getHelperRate(H, "robot")).toBe(10);
+    expect(getHelperRate(H, "factory")).toBe(40);
+    expect(getHelperClicksPerSecond(H)).toBe(53);
+  });
+
+  it("Speed-ups double per level", () => {
+    const H = S({
+      helpers: { monkey: 3, robot: 2, factory: 1 },
+      levels: { "speed-monkey": 1, "speed-robot": 2, "speed-factory": 3 },
+    });
+    expect(getHelperRate(H, "monkey")).toBe(6);
+    expect(getHelperRate(H, "robot")).toBe(40);
+    expect(getHelperRate(H, "factory")).toBe(320);
+    expect(getHelperClicksPerSecond(H)).toBe(366);
+  });
+
+  it("A speed-up only affects its own type", () => {
+    const H = S({ helpers: { monkey: 1, robot: 1 }, levels: { "speed-robot": 3 } });
+    expect(getHelperRate(H, "monkey")).toBe(1);
+    expect(getHelperRate(H, "robot")).toBe(40);
+    expect(getHelperRate(H, "factory")).toBe(0);
+    expect(getHelperClicksPerSecond(H)).toBe(41);
   });
 });
 
@@ -155,5 +214,65 @@ describe("helpers: Game tick with fractional carry", () => {
       }),
       carry: 0,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Robot, Factory and speed-ups earn through the tick
+// ---------------------------------------------------------------------------
+
+describe("helpers: Robot, Factory and speed-ups earn through the tick", () => {
+  it("Robot partial and completed click", () => {
+    const A = S({ balance: 0, totalClicks: 600, helpers: { robot: 1 } });
+    const partial = tickHelpers(A, 0, 100);
+    expect(partial.state).toBe(A);
+    expect(partial.carry).toBe(500);
+    expect(tickHelpers(A, 500, 100)).toEqual({
+      state: S({ balance: 1, totalClicks: 601, helpers: { robot: 1 } }),
+      carry: 0,
+    });
+  });
+
+  it("Fully sped-up factory for one second", () => {
+    expect(
+      tickHelpers(
+        S({
+          balance: 0,
+          totalClicks: 80000,
+          helpers: { factory: 1 },
+          levels: { "speed-factory": 3 },
+        }),
+        0,
+        1000,
+      ),
+    ).toEqual({
+      state: S({
+        balance: 320,
+        totalClicks: 80320,
+        helpers: { factory: 1 },
+        levels: { "speed-factory": 3 },
+      }),
+      carry: 0,
+    });
+  });
+
+  it("Mixed helpers over ten ticks, no float drift", () => {
+    let result: HelperTickResult = {
+      state: S({
+        balance: 0,
+        totalClicks: 1000,
+        helpers: { monkey: 1, robot: 1, factory: 1 },
+        levels: { "speed-monkey": 1 },
+      }),
+      carry: 0,
+    };
+    const carries: number[] = [];
+    for (let i = 0; i < 10; i += 1) {
+      result = tickHelpers(result.state, result.carry, 100);
+      carries.push(result.carry);
+    }
+    expect(carries).toEqual([700, 400, 100, 800, 500, 200, 900, 600, 300, 0]);
+    expect(result.state.balance).toBe(47);
+    expect(result.state.totalClicks).toBe(1047);
   });
 });

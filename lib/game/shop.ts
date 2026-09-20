@@ -1,6 +1,7 @@
 import type {
   BuyItem,
   GameState,
+  GetItemLevel,
   GetItemPrice,
   GetItemStatus,
   GetRevealedItems,
@@ -21,8 +22,8 @@ export const SHOP_UNLOCK_CLICKS = 10;
 export const PRICE_GROWTH = 1.15;
 
 /**
- * Stage 2 catalog in display order; also the canonical order of every array in GameState
- * (design D5).
+ * Stage 3 catalog in display order; also the canonical order of every array in GameState
+ * (add-shop-v1 design D5, add-upgrades-v2 design D6).
  */
 export const SHOP_CATALOG: readonly ShopItem[] = Object.freeze([
   { kind: "skin", id: "soft-shadow", category: "skins", slot: "stack", price: 15, revealAt: 10 },
@@ -73,12 +74,76 @@ export const SHOP_CATALOG: readonly ShopItem[] = Object.freeze([
     revealAt: 250,
   },
   {
+    kind: "leveled-upgrade",
+    id: "crit",
+    category: "upgrades",
+    maxLevel: 3,
+    priceGrowth: 3,
+    helper: null,
+    price: 250,
+    revealAt: 150,
+  },
+  { kind: "feature-upgrade", id: "combo", category: "upgrades", price: 400, revealAt: 250 },
+  {
+    kind: "feature-upgrade",
+    id: "golden-button",
+    category: "upgrades",
+    price: 1000,
+    revealAt: 700,
+  },
+  {
     kind: "helper",
     id: "monkey",
     category: "upgrades",
     clicksPerSecond: 1,
     price: 50,
     revealAt: 30,
+  },
+  {
+    kind: "leveled-upgrade",
+    id: "speed-monkey",
+    category: "upgrades",
+    maxLevel: 3,
+    priceGrowth: 5,
+    helper: "monkey",
+    price: 500,
+    revealAt: 300,
+  },
+  {
+    kind: "helper",
+    id: "robot",
+    category: "upgrades",
+    clicksPerSecond: 5,
+    price: 1000,
+    revealAt: 600,
+  },
+  {
+    kind: "leveled-upgrade",
+    id: "speed-robot",
+    category: "upgrades",
+    maxLevel: 3,
+    priceGrowth: 5,
+    helper: "robot",
+    price: 10000,
+    revealAt: 6000,
+  },
+  {
+    kind: "helper",
+    id: "factory",
+    category: "upgrades",
+    clicksPerSecond: 40,
+    price: 12000,
+    revealAt: 8000,
+  },
+  {
+    kind: "leveled-upgrade",
+    id: "speed-factory",
+    category: "upgrades",
+    maxLevel: 3,
+    priceGrowth: 5,
+    helper: "factory",
+    price: 120000,
+    revealAt: 75000,
   },
 ]);
 
@@ -115,7 +180,11 @@ export const getItemPrice: GetItemPrice = (state, id) => {
   return Math.round(Number((item.price * PRICE_GROWTH ** owned).toFixed(6)));
 };
 
-/** Helpers are repeatable, so they are never "owned" (design D6). */
+export const getItemLevel: GetItemLevel = () => {
+  throw new Error("not implemented");
+};
+
+/** Helpers and leveled upgrades are repeatable, so they are never "owned" (design D14). */
 function isOwned(state: GameState, item: ShopItem): boolean {
   switch (item.kind) {
     case "skin":
@@ -124,6 +193,10 @@ function isOwned(state: GameState, item: ShopItem): boolean {
       return state.decor.some((entry) => entry.id === item.id);
     case "click-upgrade":
       return state.upgrades.includes(item.id);
+    case "feature-upgrade":
+      throw new Error("not implemented");
+    case "leveled-upgrade":
+      throw new Error("not implemented");
     case "helper":
       return false;
   }
@@ -209,5 +282,9 @@ export const buyItem: BuyItem = (state, id, options) => {
           helpers: { ...state.helpers, [item.id]: state.helpers[item.id] + 1 },
         },
       };
+    case "feature-upgrade":
+      throw new Error("not implemented");
+    case "leveled-upgrade":
+      throw new Error("not implemented");
   }
 };

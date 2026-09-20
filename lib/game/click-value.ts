@@ -1,5 +1,6 @@
 import type {
   ClickModifiers,
+  CreditClick,
   GetClickModifiers,
   GetClickMultiplier,
   GetClickValue,
@@ -16,6 +17,11 @@ export const NEUTRAL_CLICK_MODIFIERS: ClickModifiers = Object.freeze({
 /** value = 1 × multiplier × combo × (crit ? 10 : 1) × goldenBonus (design D2). */
 export const getClickValue: GetClickValue = (modifiers) =>
   1 * modifiers.multiplier * modifiers.combo * (modifiers.crit ? 10 : 1) * modifiers.goldenBonus;
+
+/** Credits whole clicks and keeps the fractional remainder in memory (design D9). */
+export const creditClick: CreditClick = () => {
+  throw new Error("not implemented");
+};
 
 /** 3 with Triple click, else 2 with Double click, else 1 (specs/click-upgrades). */
 export const getClickMultiplier: GetClickMultiplier = (state) => {

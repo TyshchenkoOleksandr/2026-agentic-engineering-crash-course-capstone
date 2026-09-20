@@ -122,7 +122,7 @@ test.describe("game-persistence", () => {
 
     const rawSave = await getLocalStorageItem(page, SAVE_KEY);
     expect(rawSave ? JSON.parse(rawSave) : null).toEqual({
-      version: 2,
+      version: 3,
       state: {
         balance: 1,
         totalClicks: 1,
@@ -131,7 +131,8 @@ test.describe("game-persistence", () => {
         material: "classic",
         decor: [],
         upgrades: [],
-        helpers: { monkey: 0 },
+        helpers: { monkey: 0, robot: 0, factory: 0 },
+        levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
       },
     });
     expect(await getLocalStorageItem(page, SAVE_BACKUP_KEY)).toBe("{not json");
@@ -148,7 +149,7 @@ test.describe("game-persistence", () => {
 
     const rawSave = await getLocalStorageItem(page, SAVE_KEY);
     expect(rawSave ? JSON.parse(rawSave) : null).toEqual({
-      version: 2,
+      version: 3,
       state: {
         balance: 5,
         totalClicks: 5,
@@ -157,7 +158,8 @@ test.describe("game-persistence", () => {
         material: "classic",
         decor: [],
         upgrades: [],
-        helpers: { monkey: 0 },
+        helpers: { monkey: 0, robot: 0, factory: 0 },
+        levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
       },
     });
   });

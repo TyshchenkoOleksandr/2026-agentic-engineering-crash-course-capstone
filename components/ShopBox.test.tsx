@@ -24,7 +24,7 @@ const STATE: GameState = {
   totalClicks: 750,
   ownedSkins: ["soft-shadow"],
   enabledSkins: ["soft-shadow"],
-  helpers: { monkey: 1200 },
+  helpers: { monkey: 1200, robot: 0, factory: 0 },
 };
 
 function renderShop(state: GameState) {

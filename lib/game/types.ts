@@ -1,31 +1,45 @@
 // Shared contract for Dopamine Clicker.
 //   Stage 1: OpenSpec change add-foundation (archived).
-//   Stage 2: OpenSpec change add-shop-v1 (shop, skins, decor, Double/Triple click, Monkey helper).
+//   Stage 2: OpenSpec change add-shop-v1 (archived): shop, skins, decor, Double/Triple click, Monkey.
+//   Stage 3: OpenSpec change add-upgrades-v2: Crit (+ visual feedback), Combo, Golden button, Robot,
+//            Factory, helper speed-ups, save schema v3.
 // Types only — no runtime logic lives here. Owned by spec-writer; other agents propose changes in
 // their reports instead of editing this file.
 //
 // Implementations:
 //   lib/game/click-value.ts  -> GetClickValue, NEUTRAL_CLICK_MODIFIERS,
-//                               GetClickMultiplier, GetClickModifiers            (Stage 2: +2)
+//                               GetClickMultiplier, GetClickModifiers, CreditClick
+//                                                        (Stage 3: +context, exact value, carry)
 //   lib/game/state.ts        -> CreateInitialState, ClickMainButton, IsBalanceVisible
 //   lib/game/save.ts         -> SerializeGame, ValidateGameState, MigrateSave, ParseSave,
 //                               LoadGame, SaveGame, ClearGame, SAVE_KEY, SAVE_BACKUP_KEY,
-//                               CURRENT_SAVE_VERSION (= 2), MIGRATIONS (= { 1: MigrateV1ToV2 }),
-//                               migrateV1ToV2
+//                               CURRENT_SAVE_VERSION (= 3),
+//                               MIGRATIONS (= { 1: migrateV1ToV2, 2: migrateV2ToV3 }),
+//                               migrateV1ToV2, migrateV2ToV3                 (Stage 3: +v3)
 //   lib/game/preferences.ts  -> ParseTheme, ResolveTheme, ToggleTheme, ParseLanguage,
 //                               ResolveLanguage, ToggleLanguage, LoadPreferences, SaveTheme,
 //                               SaveLanguage, THEME_KEY, LANGUAGE_KEY
 //   lib/game/shop.ts         -> SHOP_CATALOG, SHOP_UNLOCK_CLICKS, PRICE_GROWTH, GetShopItem,
-//                               IsShopVisible, IsItemRevealed, GetItemPrice, GetItemStatus,
-//                               GetRevealedItems, BuyItem                       (Stage 2, new)
-//   lib/game/skins.ts        -> ToggleSkin, IsSkinActive, GetButtonAppearance   (Stage 2, new)
-//   lib/game/helpers.ts      -> HELPER_TICK_MS, MAX_TICK_MS, GetHelperClicksPerSecond,
-//                               TickHelpers                                       (Stage 2, new)
+//                               IsShopVisible, IsItemRevealed, GetItemPrice, GetItemLevel,
+//                               GetItemStatus, GetRevealedItems, BuyItem     (Stage 3: +levels)
+//   lib/game/skins.ts        -> ToggleSkin, IsSkinActive, GetButtonAppearance
+//   lib/game/helpers.ts      -> HELPER_TICK_MS, MAX_TICK_MS, SPEED_UP_OF, GetHelperRate,
+//                               GetHelperClicksPerSecond, TickHelpers        (Stage 3: +speed-ups)
 //   lib/game/decor.ts        -> DECOR_MARGIN, DECOR_GAP, DECOR_MAX_ATTEMPTS, RectsOverlap,
-//                               PlaceDecor, DecorRect                             (Stage 2, new)
+//                               PlaceDecor, DecorRect
+//   lib/game/crit.ts         -> CRIT_MULTIPLIER, CRIT_CHANCE_BY_LEVEL, GetCritChance, RollCrit
+//                                                                             (Stage 3, new)
+//   lib/game/combo.ts        -> COMBO_WINDOW_MS, COMBO_STEP, COMBO_MAX_LEVEL, COMBO_DECAY_MS,
+//                               CreateComboState, GetComboLevel, GetComboMultiplier,
+//                               RegisterComboClick                           (Stage 3, new)
+//   lib/game/golden.ts       -> GOLDEN_MIN_INTERVAL_MS, GOLDEN_MAX_INTERVAL_MS, GOLDEN_LIFETIME_MS,
+//                               GOLDEN_BONUS, GOLDEN_BONUS_MS, GOLDEN_SIZE, RollGoldenInterval,
+//                               CreateGoldenState, TickGolden, CatchGolden, GetGoldenBonus
+//                                                                             (Stage 3, new)
+//   lib/game/press.ts        -> CreateClickRuntime, PressMainButton          (Stage 3, new)
 //
-// Out of scope until Stage 3+: crit / combo / golden-button runtime state, Robot, Factory,
-// helper speed-ups, sound slot, remaining skins and decor, offline progress.
+// Out of scope until Stage 4: remaining skins, sound packs and the sound slot, remaining decor,
+// hiding / re-rolling decor, offline progress.
 
 // ---------------------------------------------------------------------------
 // Randomness
@@ -33,17 +47,27 @@
 
 /**
  * Injectable random source: returns a number in [0, 1) on each call (same contract as
- * `Math.random`). The UI passes `Math.random`; tests pass a scripted sequence.
+ * `Math.random`). The UI passes the page random source `globalThis.__dcRandom ?? Math.random`,
+ * read at call time (design D19); unit tests pass a scripted sequence.
  */
 export type RandomSource = () => number;
 
+declare global {
+  /**
+   * Test-only random hook (Stage 3, design D19). Unset in normal use; e2e sets it with
+   * `page.addInitScript` so every random draw of the page (crit, golden button, decor and golden
+   * placement) is deterministic without overriding `Math.random`.
+   */
+  var __dcRandom: RandomSource | undefined;
+}
+
 // ---------------------------------------------------------------------------
-// Catalog ids (Stage 2)
+// Catalog ids
 // ---------------------------------------------------------------------------
 
 /** Skins in the "stack" slot: any combination can be enabled at once. */
 export type StackSkinId = "soft-shadow" | "squish" | "floating-number" | "jumping-cap";
-/** Skins in the exclusive "material" slot (Stage 2: only Gold). */
+/** Skins in the exclusive "material" slot (Stage 2–3: only Gold). */
 export type MaterialSkinId = "gold";
 export type SkinId = StackSkinId | MaterialSkinId;
 /** Current material of the main button; "classic" is the default, not a purchasable item. */
@@ -51,10 +75,28 @@ export type MaterialId = "classic" | MaterialSkinId;
 export type SkinSlot = "stack" | "material";
 
 export type DecorId = "sleeping-cat" | "lava-lamp" | "hydraulic-press";
-export type ClickUpgradeId = "double-click" | "triple-click";
-export type HelperId = "monkey";
 
-export type ShopItemId = SkinId | DecorId | ClickUpgradeId | HelperId;
+/** One-time click multipliers (Stage 2). */
+export type ClickUpgradeId = "double-click" | "triple-click";
+/** One-time upgrades that unlock a main-button mechanic (Stage 3). */
+export type FeatureUpgradeId = "combo" | "golden-button";
+/** Everything stored in `GameState.upgrades` (one-time upgrades). */
+export type UpgradeId = ClickUpgradeId | FeatureUpgradeId;
+
+/** Helper types (Stage 3: + robot, factory). */
+export type HelperId = "monkey" | "robot" | "factory";
+/** Per-helper-type speed-up (Stage 3). */
+export type SpeedUpId = "speed-monkey" | "speed-robot" | "speed-factory";
+/** Upgrades bought level by level; their level lives in `GameState.levels` (Stage 3). */
+export type LeveledUpgradeId = "crit" | SpeedUpId;
+
+export type ShopItemId =
+  | SkinId
+  | DecorId
+  | ClickUpgradeId
+  | FeatureUpgradeId
+  | LeveledUpgradeId
+  | HelperId;
 export type ShopCategory = "skins" | "decor" | "upgrades";
 
 // ---------------------------------------------------------------------------
@@ -62,9 +104,12 @@ export type ShopCategory = "skins" | "decor" | "upgrades";
 // ---------------------------------------------------------------------------
 
 interface ShopItemBase {
-  /** Price for one-time items; base price for repeatable items (helpers). */
+  /**
+   * Price for one-time items; base price for helpers (× PRICE_GROWTH per owned) and for leveled
+   * upgrades (price of level 1; × priceGrowth per level already bought).
+   */
   readonly price: number;
-  /** Item is listed in the shop once `totalClicks >= revealAt`. */
+  /** Item is listed in the shop once `totalClicks >= revealAt` (see IsItemRevealed). */
   readonly revealAt: number;
 }
 
@@ -98,15 +143,41 @@ export interface ClickUpgradeItem extends ShopItemBase {
   readonly requires: ClickUpgradeId | null;
 }
 
+/** Combo / Golden button: bought once, stored in `upgrades` (Stage 3). */
+export interface FeatureUpgradeItem extends ShopItemBase {
+  readonly kind: "feature-upgrade";
+  readonly id: FeatureUpgradeId;
+  readonly category: "upgrades";
+}
+
+/** Crit and the helper speed-ups: bought level by level up to `maxLevel` (Stage 3). */
+export interface LeveledUpgradeItem extends ShopItemBase {
+  readonly kind: "leveled-upgrade";
+  readonly id: LeveledUpgradeId;
+  readonly category: "upgrades";
+  /** Highest level (3 for every Stage 3 item). */
+  readonly maxLevel: number;
+  /** Price of the next level = round(price × priceGrowth^currentLevel): crit 3, speed-ups 5. */
+  readonly priceGrowth: number;
+  /** Speed-ups: helper type that must be owned (count ≥ 1) before the item is revealed; crit: null. */
+  readonly helper: HelperId | null;
+}
+
 export interface HelperItem extends ShopItemBase {
   readonly kind: "helper";
   readonly id: HelperId;
   readonly category: "upgrades";
-  /** Whole clicks per second produced by one helper of this type. */
+  /** Whole clicks per second produced by one helper of this type at speed level 0. */
   readonly clicksPerSecond: number;
 }
 
-export type ShopItem = SkinItem | DecorItem | ClickUpgradeItem | HelperItem;
+export type ShopItem =
+  | SkinItem
+  | DecorItem
+  | ClickUpgradeItem
+  | FeatureUpgradeItem
+  | LeveledUpgradeItem
+  | HelperItem;
 
 // ---------------------------------------------------------------------------
 // Game state
@@ -124,8 +195,8 @@ export interface GameStateV1 {
 }
 
 /**
- * Position of a placed decor item: top-left corner as a fraction of the viewport,
- * `x = left / viewportWidth`, `y = top / viewportHeight`, both finite and in [0, 1].
+ * Position of a placed decor item (and of a golden button): top-left corner as a fraction of the
+ * viewport, `x = left / viewportWidth`, `y = top / viewportHeight`, both finite and in [0, 1].
  */
 export interface DecorPosition {
   readonly x: number;
@@ -138,9 +209,20 @@ export interface PlacedDecor {
   readonly position: DecorPosition | null;
 }
 
+/** Schema version 2 state payload (Stage 2). Kept as the input type of the v2 -> v3 migration. */
+export interface GameStateV2 extends GameStateV1 {
+  readonly ownedSkins: readonly SkinId[];
+  readonly enabledSkins: readonly StackSkinId[];
+  readonly material: MaterialId;
+  readonly decor: readonly PlacedDecor[];
+  readonly upgrades: readonly ClickUpgradeId[];
+  readonly helpers: Readonly<{ monkey: number }>;
+}
+
 /**
- * Full persisted game state. Schema version 2. All counts are non-negative safe integers.
+ * Full persisted game state. Schema version 3. All counts are non-negative safe integers.
  * Every array is kept in SHOP_CATALOG order and has no duplicates (so deep equality is stable).
+ * Runtime-only values (helper carry, combo, golden button, crit effect) are never part of it.
  */
 export interface GameState extends GameStateV1 {
   /** Purchased skins (stack and material). */
@@ -151,26 +233,145 @@ export interface GameState extends GameStateV1 {
   readonly material: MaterialId;
   /** Purchased decor with its saved position. */
   readonly decor: readonly PlacedDecor[];
-  /** Purchased click upgrades; "triple-click" only together with "double-click". */
-  readonly upgrades: readonly ClickUpgradeId[];
-  /** Number of owned helpers per type. */
+  /**
+   * Purchased one-time upgrades in catalog order ("double-click", "triple-click", "combo",
+   * "golden-button"); "triple-click" only together with "double-click".
+   */
+  readonly upgrades: readonly UpgradeId[];
+  /** Number of owned helpers per type (exactly the keys monkey, robot, factory). */
   readonly helpers: Readonly<Record<HelperId, number>>;
+  /**
+   * Level of every leveled upgrade (exactly the keys crit, speed-monkey, speed-robot,
+   * speed-factory), each an integer in [0, maxLevel]; a speed-up level > 0 only if at least one
+   * helper of its type is owned.
+   */
+  readonly levels: Readonly<Record<LeveledUpgradeId, number>>;
 }
 
 /**
  * Inputs of the click-value formula from the brief:
- *   value = 1 × multiplier × combo × (crit ? 10 : 1) × goldenBonus
- * Stage 2: `multiplier` comes from click upgrades (GetClickModifiers); the rest stay neutral.
+ *   value = 1 × multiplier × combo × (crit ? 10 : 1) × goldenBonus   (a real number, design D9;
+ *   whole clicks are credited through the main-click carry, see CreditClick)
  */
 export interface ClickModifiers {
   /** Upgrade multiplier: 1 | 2 | 3 (Double / Triple click). */
   readonly multiplier: number;
-  /** Combo multiplier in [1, 2] (Stage 3). */
+  /** Combo multiplier in [1, 2], steps of 0.1 (Stage 3). */
   readonly combo: number;
   /** Whether this click is a crit (×10, Stage 3). */
   readonly crit: boolean;
-  /** Golden button bonus while active, otherwise 1 (Stage 3). */
+  /** Golden button bonus while active (7), otherwise 1 (Stage 3). */
   readonly goldenBonus: number;
+}
+
+/**
+ * Runtime inputs of one press, computed by `pressMainButton` (or by tests). `getClickModifiers`
+ * ignores each field whose upgrade is not owned (combo: "combo" in upgrades; crit: levels.crit ≥ 1;
+ * golden bonus: "golden-button" in upgrades).
+ */
+export interface ClickContext {
+  /** `getComboMultiplier(combo, now)` after registering this press. */
+  readonly comboMultiplier: number;
+  /** Result of `rollCrit(levels.crit, random)` for this press. */
+  readonly crit: boolean;
+  /** `getGoldenBonus(golden)`: 7 while the bonus runs, otherwise 1. */
+  readonly goldenBonus: number;
+}
+
+// ---------------------------------------------------------------------------
+// Crit (Stage 3)
+// ---------------------------------------------------------------------------
+
+/** Levels 0..3 -> chance 0, 0.05, 0.10, 0.15 (CRIT_CHANCE_BY_LEVEL). */
+export type CritLevel = 0 | 1 | 2 | 3;
+
+// ---------------------------------------------------------------------------
+// Combo (Stage 3) — runtime only, never saved
+// ---------------------------------------------------------------------------
+
+export interface ComboState {
+  /** Combo level at the moment of the last registered press, integer in [0, COMBO_MAX_LEVEL]. */
+  readonly level: number;
+  /** Timestamp (ms, same clock as `nowMs`) of the last registered press, or null before the first. */
+  readonly lastClickAt: number | null;
+}
+
+// ---------------------------------------------------------------------------
+// Golden button (Stage 3) — runtime only, never saved
+// ---------------------------------------------------------------------------
+
+export interface GoldenSpawn {
+  /** Saved-style fractional top-left corner (same convention as decor, see `decorRect`). */
+  readonly position: DecorPosition;
+  /** Remaining visible time in ms (> 0). */
+  readonly remainingMs: number;
+}
+
+export interface GoldenState {
+  /** ms until the next spawn; counts down only while no golden button is visible (0 while visible). */
+  readonly nextSpawnMs: number;
+  /** The golden button on screen, or null. At most one at a time. */
+  readonly visible: GoldenSpawn | null;
+  /** Remaining ms of the ×7 bonus; 0 = inactive. */
+  readonly bonusMs: number;
+}
+
+export interface TickGoldenInput {
+  readonly golden: GoldenState;
+  /** Clamped to [0, MAX_TICK_MS] like helper ticks; NaN / negative count as 0. */
+  readonly elapsedMs: number;
+  /** Used only to roll the next interval (one call per roll). */
+  readonly random: RandomSource;
+  /**
+   * Picks a free spot for a new golden button (UI: `placeDecor` with GOLDEN_SIZE, the reserved rects
+   * of design D8 and the page random source `pageRandom`). Called exactly once per spawn attempt; null = skip this spawn.
+   */
+  readonly place: () => DecorPosition | null;
+}
+
+// ---------------------------------------------------------------------------
+// Main-button press pipeline (Stage 3)
+// ---------------------------------------------------------------------------
+
+/** In-memory companion of GameState for the main button; reset to `createClickRuntime()` on reset. */
+export interface ClickRuntime {
+  readonly combo: ComboState;
+  /** null until the golden button is owned and the first game tick / purchase created it. */
+  readonly golden: GoldenState | null;
+}
+
+/**
+ * Result of crediting one click value: `credited` whole clicks go to the balance, `carry` is the
+ * fractional remainder in [0, 1) (rounded to 6 decimals), kept in memory only, never saved.
+ */
+export interface CreditResult {
+  readonly credited: number;
+  readonly carry: number;
+}
+
+export interface PressInput {
+  readonly state: GameState;
+  readonly runtime: ClickRuntime;
+  /** Main-click carry before this press, in [0, 1). Runtime only (0 after load and reset). */
+  readonly carry: number;
+  /** Current time in ms (UI: `performance.now()`). */
+  readonly nowMs: number;
+  /** Used only for the crit roll (0 calls when levels.crit is 0, exactly 1 otherwise). */
+  readonly random: RandomSource;
+}
+
+export interface PressResult {
+  readonly state: GameState;
+  /** Same object as the input runtime when nothing in it changed (combo not owned). */
+  readonly runtime: ClickRuntime;
+  /** Exact click value of this press (`getClickValue(modifiers)`), may be fractional. */
+  readonly value: number;
+  /** Whole clicks added to the balance by this press (`creditClick(carry, value).credited`). */
+  readonly credited: number;
+  /** Main-click carry after this press, in [0, 1). */
+  readonly carry: number;
+  /** True when this press was a crit (drives the crit visual feedback). */
+  readonly crit: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -179,13 +380,20 @@ export interface ClickModifiers {
 
 /**
  * Status of one catalog item for a given state, evaluated in this priority order:
- * - `owned`        — one-time item already bought (never returned for helpers);
- * - `hidden`       — `totalClicks < revealAt` (not rendered in the shop);
+ * - `owned`        — one-time item already bought (never for helpers or leveled upgrades);
+ * - `maxed`        — leveled upgrade at `maxLevel` (Stage 3);
+ * - `hidden`       — not revealed (see IsItemRevealed; not rendered in the shop);
  * - `requires`     — a click upgrade whose `requires` item is not owned (shown disabled);
  * - `unaffordable` — `balance < current price` (shown disabled with the price);
  * - `available`    — can be bought now.
  */
-export type ShopItemStatus = "owned" | "hidden" | "requires" | "unaffordable" | "available";
+export type ShopItemStatus =
+  | "owned"
+  | "maxed"
+  | "hidden"
+  | "requires"
+  | "unaffordable"
+  | "available";
 
 export type BuyFailureReason = Exclude<ShopItemStatus, "available">;
 
@@ -219,7 +427,7 @@ export interface HelperTickResult {
 }
 
 // ---------------------------------------------------------------------------
-// Decor placement
+// Decor placement (also used for the golden button)
 // ---------------------------------------------------------------------------
 
 /** Axis-aligned rectangle in CSS px (same shape as a DOMRect subset). */
@@ -262,17 +470,23 @@ export type SaveKey = "dopamine-clicker:save";
 export type SaveBackupKey = "dopamine-clicker:save:bad";
 
 /** Version of the save schema written by this build. */
-export type CurrentSaveVersion = 2;
+export type CurrentSaveVersion = 3;
 
-/** Stage 1 on-disk envelope (read-only now; migrated to v2 on load). */
+/** Stage 1 on-disk envelope (read-only now; migrated v1 -> v2 -> v3 on load). */
 export interface SaveFileV1 {
   readonly version: 1;
   readonly state: GameStateV1;
 }
 
-/** On-disk envelope written under SAVE_KEY from Stage 2 on. */
+/** Stage 2 on-disk envelope (read-only now; migrated v2 -> v3 on load). */
 export interface SaveFileV2 {
   readonly version: 2;
+  readonly state: GameStateV2;
+}
+
+/** On-disk envelope written under SAVE_KEY from Stage 3 on. */
+export interface SaveFileV3 {
+  readonly version: 3;
   readonly state: GameState;
 }
 
@@ -285,13 +499,13 @@ export interface UnknownSaveFile {
 /** Converts the `state` payload of version N into the payload of version N + 1. */
 export type Migration = (state: unknown) => unknown;
 
-/** Keyed by SOURCE version: table[1] migrates v1 -> v2. */
+/** Keyed by SOURCE version: table[1] migrates v1 -> v2, table[2] migrates v2 -> v3. */
 export type MigrationTable = Readonly<Record<number, Migration>>;
 
 export interface ParseSaveOptions {
-  /** Defaults to the built-in table MIGRATIONS (`{ 1: migrateV1ToV2 }` in Stage 2). */
+  /** Defaults to the built-in table MIGRATIONS (`{ 1: migrateV1ToV2, 2: migrateV2ToV3 }`). */
   readonly migrations?: MigrationTable;
-  /** Defaults to CURRENT_SAVE_VERSION (2). */
+  /** Defaults to CURRENT_SAVE_VERSION (3). */
   readonly targetVersion?: number;
 }
 
@@ -328,16 +542,33 @@ export interface Preferences {
 // ---------------------------------------------------------------------------
 
 // click-value.ts
+/**
+ * `Number((1 × multiplier × combo × (crit ? 10 : 1) × goldenBonus).toFixed(6))` — the exact product
+ * with float artefacts removed (e.g. 3 × 1.1 -> 3.3, 3 × 1.4 × 10 -> 42), NOT rounded to an
+ * integer (Stage 3, design D9).
+ */
 export type GetClickValue = (modifiers: ClickModifiers) => number;
+/**
+ * `total = Number((carry + value).toFixed(6))`, `credited = Math.floor(total)`,
+ * `carry' = Number((total − credited).toFixed(6))` (design D9).
+ */
+export type CreditClick = (carry: number, value: number) => CreditResult;
 /** 3 if "triple-click" is owned, else 2 if "double-click" is owned, else 1. */
 export type GetClickMultiplier = (state: GameState) => 1 | 2 | 3;
-/** `{ multiplier: GetClickMultiplier(state), combo: 1, crit: false, goldenBonus: 1 }` (Stage 2). */
-export type GetClickModifiers = (state: GameState) => ClickModifiers;
+/**
+ * `{ multiplier: GetClickMultiplier(state), combo, crit, goldenBonus }` where each context field is
+ * used only if its upgrade is owned (see ClickContext), else neutral. Without `context` all three
+ * are neutral (`combo: 1, crit: false, goldenBonus: 1`), exactly as in Stage 2.
+ */
+export type GetClickModifiers = (state: GameState, context?: ClickContext) => ClickModifiers;
 
 // state.ts
-/** v2 fresh state; see specs/clicker-core "Initial game state". */
+/** v3 fresh state; see specs/clicker-core "Initial game state". */
 export type CreateInitialState = () => GameState;
-/** Adds the click value to balance and 1 to totalClicks; every other field is copied unchanged. */
+/**
+ * Carry-free click: adds `Math.floor(GetClickValue(modifiers))` to balance and 1 to totalClicks;
+ * every other field is copied unchanged. The UI uses `PressMainButton` (carry-aware) instead.
+ */
 export type ClickMainButton = (state: GameState, modifiers: ClickModifiers) => GameState;
 export type IsBalanceVisible = (state: GameStateV1) => boolean;
 
@@ -345,19 +576,24 @@ export type IsBalanceVisible = (state: GameStateV1) => boolean;
 export type GetShopItem = (id: ShopItemId) => ShopItem;
 /** `totalClicks >= SHOP_UNLOCK_CLICKS` (10). */
 export type IsShopVisible = (state: GameStateV1) => boolean;
-/** `totalClicks >= item.revealAt`. */
-export type IsItemRevealed = (state: GameStateV1, id: ShopItemId) => boolean;
 /**
- * One-time items: `item.price`. Helpers:
- * `Math.round(Number((item.price * PRICE_GROWTH ** owned).toFixed(6)))` where
- * `owned = state.helpers[id]` (rounds the intended value: owned 1 -> 58, not the float 57).
+ * `totalClicks >= item.revealAt`, and for speed-ups additionally `helpers[item.helper] >= 1`
+ * (Stage 3; the parameter type widened from GameStateV1 to GameState).
+ */
+export type IsItemRevealed = (state: GameState, id: ShopItemId) => boolean;
+/**
+ * One-time items: `item.price`. Helpers: `R(item.price × PRICE_GROWTH ** helpers[id])`.
+ * Leveled upgrades: `R(item.price × item.priceGrowth ** levels[id])` (also at max level).
+ * `R(x) = Math.round(Number(x.toFixed(6)))` (design D6 of add-shop-v1).
  */
 export type GetItemPrice = (state: GameState, id: ShopItemId) => number;
+/** `state.levels[id]` (Stage 3). */
+export type GetItemLevel = (state: GameState, id: LeveledUpgradeId) => number;
 export type GetItemStatus = (state: GameState, id: ShopItemId) => ShopItemStatus;
 /** Items with status !== "hidden", in SHOP_CATALOG order, optionally filtered by category. */
 export type GetRevealedItems = (state: GameState, category?: ShopCategory) => readonly ShopItem[];
 /**
- * Buys one unit if `GetItemStatus` is "available"; otherwise `{ ok: false, reason: status }`.
+ * Buys one unit / level if `GetItemStatus` is "available"; otherwise `{ ok: false, reason: status }`.
  * Never changes totalClicks. See specs/shop "Buying".
  */
 export type BuyItem = (state: GameState, id: ShopItemId, options?: BuyOptions) => BuyResult;
@@ -373,13 +609,15 @@ export type IsSkinActive = (state: GameState, id: SkinId) => boolean;
 export type GetButtonAppearance = (state: GameState) => ButtonAppearance;
 
 // helpers.ts
-/** `Σ helpers[type] × clicksPerSecond(type)` (no speed-ups in Stage 2). */
+/** `helpers[id] × clicksPerSecond(id) × 2 ** levels[SPEED_UP_OF[id]]` (Stage 3). */
+export type GetHelperRate = (state: GameState, id: HelperId) => number;
+/** `Σ GetHelperRate(state, type)` over monkey, robot, factory. */
 export type GetHelperClicksPerSecond = (state: GameState) => number;
 /**
  * Advances helpers by `elapsedMs` (clamped to [0, MAX_TICK_MS]; NaN/negative -> 0).
  * `milli = carry + clicksPerSecond × elapsed`; `whole = floor(milli / 1000)` is added to both
- * balance and totalClicks (click multipliers are NOT applied); new carry = `milli % 1000`.
- * When `whole === 0` the returned `state` is the input object (same reference).
+ * balance and totalClicks (click multipliers, combo, crit and golden bonus are NOT applied);
+ * new carry = `milli % 1000`. When `whole === 0` the returned `state` is the input object.
  */
 export type TickHelpers = (state: GameState, carry: number, elapsedMs: number) => HelperTickResult;
 
@@ -394,13 +632,72 @@ export type PlaceDecor = (input: PlaceDecorInput) => DecorPosition | null;
  */
 export type DecorRect = (position: DecorPosition, size: Size, viewport: Size) => Rect;
 
+// crit.ts (Stage 3)
+/** `CRIT_CHANCE_BY_LEVEL[level]` for integer levels 0..3, otherwise 0 (below) / 0.15 (above). */
+export type GetCritChance = (level: number) => number;
+/**
+ * Level ≤ 0: returns false WITHOUT calling `random`. Otherwise calls `random` exactly once and
+ * returns `random() < GetCritChance(level)`.
+ */
+export type RollCrit = (level: number, random: RandomSource) => boolean;
+
+// combo.ts (Stage 3)
+/** `{ level: 0, lastClickAt: null }`, a new object each call. */
+export type CreateComboState = () => ComboState;
+/**
+ * Effective level at `nowMs`: 0 before the first press; `level` while
+ * `idle = max(0, nowMs − lastClickAt) ≤ COMBO_WINDOW_MS`; afterwards
+ * `max(0, level − ceil((idle − COMBO_WINDOW_MS) / COMBO_DECAY_MS))`.
+ */
+export type GetComboLevel = (combo: ComboState, nowMs: number) => number;
+/** `1 + GetComboLevel(combo, nowMs) / 10` (i.e. level × COMBO_STEP), in [1, 2]. */
+export type GetComboMultiplier = (combo: ComboState, nowMs: number) => number;
+/**
+ * Registers one press at `nowMs`: a "fast" press (previous press exists and
+ * `nowMs − lastClickAt ≤ COMBO_WINDOW_MS`) sets `level = min(COMBO_MAX_LEVEL, effective + 1)`;
+ * any other press keeps the decayed effective level. Always sets `lastClickAt = nowMs`.
+ */
+export type RegisterComboClick = (combo: ComboState, nowMs: number) => ComboState;
+
+// golden.ts (Stage 3)
+/**
+ * `GOLDEN_MIN_INTERVAL_MS + Math.floor(random() × (GOLDEN_MAX_INTERVAL_MS − GOLDEN_MIN_INTERVAL_MS + 1))`
+ * — an integer in [30 000, 90 000]; exactly one `random` call.
+ */
+export type RollGoldenInterval = (random: RandomSource) => number;
+/** `{ nextSpawnMs: RollGoldenInterval(random), visible: null, bonusMs: 0 }`. */
+export type CreateGoldenState = (random: RandomSource) => GoldenState;
+/** One game tick of the golden button; see specs/golden-button "Golden button timing". */
+export type TickGolden = (input: TickGoldenInput) => GoldenState;
+/**
+ * Visible golden button: `{ nextSpawnMs: RollGoldenInterval(random), visible: null,
+ * bonusMs: GOLDEN_BONUS_MS }` (a running bonus is restarted, not stacked). Nothing visible: returns
+ * the input object unchanged (same reference) without calling `random`.
+ */
+export type CatchGolden = (golden: GoldenState, random: RandomSource) => GoldenState;
+/** GOLDEN_BONUS (7) when `golden !== null && golden.bonusMs > 0`, otherwise 1. */
+export type GetGoldenBonus = (golden: GoldenState | null) => number;
+
+// press.ts (Stage 3)
+/** `{ combo: createComboState(), golden: null }`, a new object each call. */
+export type CreateClickRuntime = () => ClickRuntime;
+/**
+ * One main-button press: registers the combo (only if "combo" is owned), rolls the crit
+ * (`rollCrit(levels.crit, random)`), reads the golden bonus, computes the exact value with
+ * `getClickModifiers(state, context)` / `getClickValue`, credits it with `creditClick(carry, value)`
+ * and adds `credited` to balance and 1 to totalClicks. See specs/click-upgrades.
+ */
+export type PressMainButton = (input: PressInput) => PressResult;
+
 // save.ts
-/** Writes `{ version: 2, state }` with exactly the GameState fields (no timestamps). */
+/** Writes `{ version: 3, state }` with exactly the GameState fields (no timestamps, no runtime). */
 export type SerializeGame = (state: GameState) => string;
-/** v2 validator; returns a normalized copy (arrays in catalog order, extra keys dropped) or null. */
+/** v3 validator; returns a normalized copy (arrays in catalog order, extra keys dropped) or null. */
 export type ValidateGameState = (value: unknown) => GameState | null;
-/** Built-in MIGRATIONS[1]: v1 payload -> v2 payload with default shop fields. */
+/** Built-in MIGRATIONS[1]: v1 payload -> v2 payload with default shop fields (unchanged). */
 export type MigrateV1ToV2 = (state: unknown) => unknown;
+/** Built-in MIGRATIONS[2]: v2 payload -> v3 payload (robot/factory 0, all levels 0). */
+export type MigrateV2ToV3 = (state: unknown) => unknown;
 export type MigrateSave = (
   file: UnknownSaveFile,
   migrations: MigrationTable,

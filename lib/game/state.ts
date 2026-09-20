@@ -9,7 +9,8 @@ export const createInitialState: CreateInitialState = () => ({
   material: "classic",
   decor: [],
   upgrades: [],
-  helpers: { monkey: 0 },
+  helpers: { monkey: 0, robot: 0, factory: 0 },
+  levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
 });
 
 /** One press: balance grows by the click value, totalClicks always by 1 (design D3). */
