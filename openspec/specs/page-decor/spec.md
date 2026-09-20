@@ -108,15 +108,16 @@ vh − h))`.
 
 ### Requirement: Placing decor on purchase
 When a decor item is bought, the UI SHALL call `placeDecor` with the item's catalog size, the
-current viewport, `Math.random` and the reserved rects listed in design D10 (main button, balance
-area, shop box at its maximum height, top-right switchers, helper zone, reset button, every placed
-decor), and pass the result as `decorPosition` to `buyItem` in the same state update. Each decor
-SHALL render as `[data-testid="decor-<id>"]` (`position: fixed`, `role="img"`, `aria-label` = the
-localized item name) at `decorRect(position, size, viewport)`, or in the fallback dock (right edge,
-`right: 16px`, vertically centered, catalog order, 8 px gap) when the position is `null`
-(DECISION (confirmed), design D9). Decor SHALL NOT intercept clicks meant for the UI
-(`pointer-events: none`). Bought decor cannot be hidden or re-rolled in this stage
-(DECISION (confirmed), design D4).
+current viewport, the page random source `pageRandom` (design D19) and the reserved rects listed in add-shop-v1 design D10 plus the
+click-status slot (main button, balance area, shop box at its maximum height, top-right switchers,
+helper zone, reset button, `[data-testid="click-status"]`, every placed decor), and pass the result
+as `decorPosition` to `buyItem` in the same state update. Each decor SHALL render as
+`[data-testid="decor-<id>"]` (`position: fixed`, `role="img"`, `aria-label` = the localized item
+name) at `decorRect(position, size, viewport)`, or in the fallback dock (right edge, `right: 16px`,
+vertically centered, catalog order, 8 px gap) when the position is `null` (DECISION (confirmed),
+add-shop-v1 design D9). Decor SHALL NOT intercept clicks meant for the UI (`pointer-events: none`).
+Bought decor cannot be hidden or re-rolled in this stage (DECISION (confirmed), add-shop-v1 design
+D4).
 
 #### Scenario: Buying the cat places it clear of the UI [e2e]
 - **GIVEN** storage is seeded with `V2(S({ balance: 100, totalClicks: 75 }))`
@@ -152,3 +153,10 @@ localized item name) at `decorRect(position, size, viewport)`, or in the fallbac
 - **GIVEN** storage is seeded with `V2(S({ balance: 5, totalClicks: 150, decor: [{ id: "lava-lamp", position: { x: 0.45, y: 0.4 } }] }))` (drawn over the main button on purpose)
 - **WHEN** the user clicks `[data-testid="main-button"]` (Playwright actionability check must pass without `force`)
 - **THEN** `[data-testid="balance"]` shows `6`
+
+#### Scenario: Decor avoids the click-status slot [e2e]
+New test in `e2e/add-upgrades-v2.spec.ts`.
+- **GIVEN** storage is seeded with `V3(S({ balance: 1800, totalClicks: 750 }))`
+- **WHEN** the user buys `hydraulic-press`, then `lava-lamp`, then `sleeping-cat`
+- **THEN** `[data-testid="click-status"]` is attached with a box of 160 × 64 (±1 px) whose x is within 1 px of the main button's right edge + 24
+- **AND** none of the three `[data-testid^="decor-"]` boxes strictly overlaps the `[data-testid="click-status"]` box

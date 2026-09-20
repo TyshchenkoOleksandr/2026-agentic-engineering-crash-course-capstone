@@ -14,22 +14,28 @@ viewport (1280 × 720) with empty `localStorage`.
 ### Requirement: Initial game state
 A new game SHALL start with balance 0, total clicks 0 and nothing bought:
 `FRESH = { balance: 0, totalClicks: 0, ownedSkins: [], enabledSkins: [], material: "classic",
-decor: [], upgrades: [], helpers: { monkey: 0 } }`.
+decor: [], upgrades: [], helpers: { monkey: 0, robot: 0, factory: 0 }, levels: { crit: 0,
+"speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 } }`.
 
 #### Scenario: Fresh state values [unit]
 - **WHEN** the initial state is created
-- **THEN** it deep-equals `{ balance: 0, totalClicks: 0, ownedSkins: [], enabledSkins: [], material: "classic", decor: [], upgrades: [], helpers: { monkey: 0 } }`
+- **THEN** it deep-equals `{ balance: 0, totalClicks: 0, ownedSkins: [], enabledSkins: [], material: "classic", decor: [], upgrades: [], helpers: { monkey: 0, robot: 0, factory: 0 }, levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 } }`
 
 #### Scenario: Fresh state is a new object each time [unit]
 - **WHEN** the initial state is created twice
 - **THEN** both results deep-equal `FRESH`
-- **AND** they are not the same object reference, and neither are their `ownedSkins`, `decor` or `helpers` members
+- **AND** they are not the same object reference, and neither are their `ownedSkins`, `decor`, `helpers` or `levels` members
 
 ### Requirement: Click value formula
-The value of one main-button click SHALL be `1 × multiplier × combo × (crit ? 10 : 1) × goldenBonus`.
-In this stage the UI SHALL pass `getClickModifiers(state)` (see click-upgrades), i.e. the multiplier
-comes from owned click upgrades and `combo: 1, crit: false, goldenBonus: 1` stay neutral.
-`NEUTRAL_CLICK_MODIFIERS` remains exported for tests and later stages.
+The value of one main-button click SHALL be the exact product
+`getClickValue(m) = Number((1 × multiplier × combo × (crit ? 10 : 1) × goldenBonus).toFixed(6))`
+(the 6-decimal normalisation only removes float artefacts; the value is NOT rounded to an integer).
+Whole clicks SHALL be credited with `creditClick(carry, value)`: `total = Number((carry +
+value).toFixed(6))`, `credited = Math.floor(total)`, `carry' = Number((total − credited).toFixed(6))`,
+so the balance stays an integer and fractions accumulate across presses. The main-click carry is
+runtime-only: never saved, 0 after load and after reset (DECISION (confirmed), design D2, D9).
+The UI SHALL obtain modifiers, value and credit through `pressMainButton` (see click-upgrades).
+`NEUTRAL_CLICK_MODIFIERS` remains exported for tests.
 
 #### Scenario: Neutral modifiers give 1 [unit]
 - **WHEN** the click value is computed for `{ multiplier: 1, combo: 1, crit: false, goldenBonus: 1 }`
@@ -56,10 +62,43 @@ comes from owned click upgrades and `combo: 1, crit: false, goldenBonus: 1` stay
 - **WHEN** the click value is computed for `{ multiplier: 1, combo: 2, crit: false, goldenBonus: 7 }`
 - **THEN** the result is `14`
 
+#### Scenario: Fractional values are exact, not rounded [unit]
+- **WHEN** the click value is computed for `{ multiplier: 1, combo: 1.5, crit: false, goldenBonus: 1 }`, `{ multiplier: 3, combo: 1.1, crit: false, goldenBonus: 1 }` (raw float product `3.3000000000000003`) and `{ multiplier: 3, combo: 1.7, crit: false, goldenBonus: 7 }` (raw `35.699999999999996`)
+- **THEN** the results are exactly (`toBe`) `1.5`, `3.3` and `35.7`
+
+#### Scenario: Crit and golden products stay exact integers [unit]
+- **WHEN** the click value is computed for `{ multiplier: 3, combo: 1.4, crit: true, goldenBonus: 1 }` (raw `41.99999999999999`), `{ multiplier: 3, combo: 1.9, crit: true, goldenBonus: 7 }` (raw `398.99999999999994`), `{ multiplier: 2, combo: 1.3, crit: true, goldenBonus: 1 }` and `{ multiplier: 3, combo: 1.5, crit: true, goldenBonus: 7 }`
+- **THEN** the results are exactly `42`, `399`, `26` and `315`
+
+#### Scenario: Combo levels with Triple click [unit]
+- **WHEN** the click value is computed for `{ multiplier: 3, combo: 1 + k / 10, crit: false, goldenBonus: 1 }` for `k = 0 … 10`
+- **THEN** the results are exactly `3, 3.3, 3.6, 3.9, 4.2, 4.5, 4.8, 5.1, 5.4, 5.7, 6`
+
+#### Scenario: Carry credits whole clicks at combo ×1.3 [unit]
+- **GIVEN** carry `0` and value `getClickValue({ multiplier: 1, combo: 1.3, crit: false, goldenBonus: 1 })` = `1.3`
+- **WHEN** `creditClick` is applied 4 times, feeding each result's `carry` into the next call
+- **THEN** the `credited` values are `1, 1, 1, 2` and the carries are exactly `0.3, 0.6, 0.9, 0.2`
+
+#### Scenario: Carry over ten Triple ×1.1 presses [unit]
+- **GIVEN** carry `0` and value `3.3`
+- **WHEN** `creditClick` is applied 10 times, feeding each carry into the next call
+- **THEN** the `credited` values are `3, 3, 3, 4, 3, 3, 4, 3, 3, 4` (sum `33`) and the final carry is exactly `0`
+
+#### Scenario: Integer values pass the carry through [unit]
+- **WHEN** `creditClick(0, 20)`, `creditClick(0.5, 7)` and `creditClick(0, 42)` are called
+- **THEN** the results are `{ credited: 20, carry: 0 }`, `{ credited: 7, carry: 0.5 }` and `{ credited: 42, carry: 0 }`
+
+#### Scenario: Float tolerance completes a click [unit]
+- **GIVEN** `0.7 + 0.3` and `0.9 + 0.1` are evaluated in JavaScript
+- **WHEN** `creditClick(0.7, 0.3)` and `creditClick(0.9, 0.1)` are called
+- **THEN** both results are `{ credited: 1, carry: 0 }`
+
 ### Requirement: Main-button click updates balance and total clicks
-A main-button click SHALL add the click value to the balance and add exactly 1 to total clicks
-(total clicks counts presses, not earned amount). Every other state field SHALL be copied
-unchanged. The operation SHALL return a new state and SHALL NOT mutate its input.
+A main-button press SHALL add the credited whole clicks to the balance and add exactly 1 to total
+clicks (total clicks counts presses, not earned amount). `clickMainButton(state, modifiers)` is the
+carry-free form: it SHALL add `Math.floor(getClickValue(modifiers))` to the balance and 1 to total
+clicks; the UI uses the carry-aware `pressMainButton` (click-upgrades). Every other state field
+SHALL be copied unchanged. The operation SHALL return a new state and SHALL NOT mutate its input.
 
 #### Scenario: First click [unit]
 - **GIVEN** state `FRESH`
@@ -75,6 +114,11 @@ unchanged. The operation SHALL return a new state and SHALL NOT mutate its input
 - **GIVEN** state `S({ balance: 5, totalClicks: 5 })`
 - **WHEN** the main button is clicked with `{ multiplier: 2, combo: 1, crit: true, goldenBonus: 1 }`
 - **THEN** the new state is `S({ balance: 25, totalClicks: 6 })`
+
+#### Scenario: Carry-free click floors a fractional value [unit]
+- **GIVEN** state `S({ balance: 5, totalClicks: 5 })`
+- **WHEN** `clickMainButton` is called with `{ multiplier: 3, combo: 1.5, crit: false, goldenBonus: 1 }` (value `4.5`)
+- **THEN** the new state is `S({ balance: 9, totalClicks: 6 })`
 
 #### Scenario: Other fields are copied unchanged [unit]
 - **GIVEN** state `S({ balance: 5, totalClicks: 70, ownedSkins: ["squish", "gold"], enabledSkins: ["squish"], material: "gold", decor: [{ id: "sleeping-cat", position: { x: 0.1, y: 0.2 } }], upgrades: ["double-click"], helpers: { monkey: 2 } })`
