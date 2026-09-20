@@ -136,8 +136,10 @@ describe("clicker-core: Click value formula", () => {
   });
 
   it("Float tolerance completes a click", () => {
-    expect(0.7 + 0.3).not.toBe(1);
-    expect(0.9 + 0.1).not.toBe(1);
+    // 0.7 + 0.3 and 0.9 + 0.1 are exactly 1 in IEEE-754; the tolerance matters for carries
+    // such as 0.1 + 0.2 (0.30000000000000004), which toFixed(6) folds back (spec D9).
+    expect(0.1 + 0.2).not.toBe(0.3);
+    expect(creditClick(0.9, 0.2)).toEqual({ credited: 1, carry: 0.1 });
     expect(creditClick(0.7, 0.3)).toEqual({ credited: 1, carry: 0 });
     expect(creditClick(0.9, 0.1)).toEqual({ credited: 1, carry: 0 });
   });
