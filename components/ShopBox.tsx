@@ -1,6 +1,12 @@
 import { useId } from "react";
 import { formatNumber } from "@/lib/i18n";
-import { getItemPrice, getItemStatus, getRevealedItems, getShopItem } from "@/lib/game/shop";
+import {
+  getItemLevel,
+  getItemPrice,
+  getItemStatus,
+  getRevealedItems,
+  getShopItem,
+} from "@/lib/game/shop";
 import { isSkinActive } from "@/lib/game/skins";
 import type {
   GameState,
@@ -116,7 +122,7 @@ interface ShopItemControlsProps extends ShopRowProps {
   readonly nameId: string;
 }
 
-/** Buy button, skin toggle, owned / requires / count label — one row per catalog item (D15). */
+/** Buy button, skin toggle, owned / requires / count / level label — one row per item (D15/D18). */
 function ShopItemControls({ item, state, price, onBuy, onToggle, nameId }: ShopItemControlsProps) {
   const { t, language } = usePreferences();
   const status = getItemStatus(state, item.id);
@@ -133,6 +139,27 @@ function ShopItemControls({ item, state, price, onBuy, onToggle, nameId }: ShopI
   }
 
   const owned = item.kind === "helper" ? state.helpers[item.id] : 0;
+  // Leveled upgrades show their level instead of a count, and lose the buy button at max (D18).
+  const level = item.kind === "leveled-upgrade" ? getItemLevel(state, item.id) : 0;
+  const levelLabel = item.kind === "leveled-upgrade" && level > 0 && (
+    <span data-testid={`shop-level-${item.id}`} className="text-xs text-muted">
+      {t("shop.level", {
+        level: formatNumber(level, language),
+        max: formatNumber(item.maxLevel, language),
+      })}
+    </span>
+  );
+
+  if (status === "maxed") {
+    return (
+      <div className="flex flex-col gap-1">
+        {levelLabel}
+        <span data-testid={`shop-maxed-${item.id}`} className="text-xs font-medium text-muted">
+          {t("shop.maxed")}
+        </span>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col gap-1">
@@ -141,6 +168,7 @@ function ShopItemControls({ item, state, price, onBuy, onToggle, nameId }: ShopI
           {t("shop.requires", { item: t(nameKey(getShopItem(item.requires).id)) })}
         </span>
       )}
+      {levelLabel}
       {owned > 0 && (
         <span data-testid={`shop-count-${item.id}`} className="text-xs text-muted">
           {t("shop.count", { count: formatNumber(owned, language) })}

@@ -13,10 +13,13 @@ export const createInitialState: CreateInitialState = () => ({
   levels: { crit: 0, "speed-monkey": 0, "speed-robot": 0, "speed-factory": 0 },
 });
 
-/** One press: balance grows by the click value, totalClicks always by 1 (design D3). */
+/**
+ * One press without a carry: balance grows by the whole part of the click value, totalClicks always
+ * by 1 (design D3 / D9). The UI uses `pressMainButton`, which keeps the fractional remainder.
+ */
 export const clickMainButton: ClickMainButton = (state, modifiers) => ({
   ...state,
-  balance: state.balance + getClickValue(modifiers),
+  balance: state.balance + Math.floor(getClickValue(modifiers)),
   totalClicks: state.totalClicks + 1,
 });
 

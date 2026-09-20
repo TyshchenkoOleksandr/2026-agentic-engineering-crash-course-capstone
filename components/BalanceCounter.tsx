@@ -17,14 +17,14 @@ interface BalanceCounterProps {
 // counter would show 0 until hydration. Duplicates the envelope rules of lib/game/save.ts and
 // the formatting of lib/i18n on purpose — an import could not run blocking (design D8). The
 // storage keys and save version are interpolated from the same constants lib/game/save.ts and
-// lib/game/preferences.ts export, so the two copies cannot drift apart. Both save versions carry
-// balance and totalClicks, so a Stage 1 save is painted too (v1 is migrated during hydration).
+// lib/game/preferences.ts export, so the two copies cannot drift apart. Every save version carries
+// balance and totalClicks, so older saves are painted too (they are migrated during hydration).
 const PRE_PAINT_BALANCE = `{try{
 var el=document.querySelector('[data-testid="balance"]');
 var raw=el&&localStorage.getItem(${JSON.stringify(SAVE_KEY)});
 var file=raw?JSON.parse(raw):null;
 var ver=file&&file.version;
-var s=(ver===1||ver===${JSON.stringify(CURRENT_SAVE_VERSION)})&&file.state?file.state:null;
+var s=(typeof ver==="number"&&ver>=1&&ver<=${JSON.stringify(CURRENT_SAVE_VERSION)})&&file.state?file.state:null;
 var ok=s&&Number.isSafeInteger(s.balance)&&s.balance>=0&&Number.isSafeInteger(s.totalClicks)&&s.totalClicks>=0;
 if(ok){
 var l=localStorage.getItem(${JSON.stringify(LANGUAGE_KEY)});

@@ -167,22 +167,32 @@ export const getShopItem: GetShopItem = (id) => {
 
 export const isShopVisible: IsShopVisible = (state) => state.totalClicks >= SHOP_UNLOCK_CLICKS;
 
-export const isItemRevealed: IsItemRevealed = (state, id) =>
-  state.totalClicks >= getShopItem(id).revealAt;
+export const isItemRevealed: IsItemRevealed = (state, id) => {
+  const item = getShopItem(id);
+  if (state.totalClicks < item.revealAt) {
+    return false;
+  }
+  // A speed-up stays hidden until at least one helper of its type is owned (design D5).
+  return item.kind !== "leveled-upgrade" || item.helper === null || state.helpers[item.helper] >= 1;
+};
+
+/** Round the mathematically intended value, not the float artefact (design D6). */
+function roundPrice(value: number): number {
+  return Math.round(Number(value.toFixed(6)));
+}
 
 export const getItemPrice: GetItemPrice = (state, id) => {
   const item = getShopItem(id);
-  if (item.kind !== "helper") {
-    return item.price;
+  if (item.kind === "helper") {
+    return roundPrice(item.price * PRICE_GROWTH ** state.helpers[item.id]);
   }
-  // Round the mathematically intended value, not the float artefact (design D6).
-  const owned = state.helpers[item.id];
-  return Math.round(Number((item.price * PRICE_GROWTH ** owned).toFixed(6)));
+  if (item.kind === "leveled-upgrade") {
+    return roundPrice(item.price * item.priceGrowth ** state.levels[item.id]);
+  }
+  return item.price;
 };
 
-export const getItemLevel: GetItemLevel = () => {
-  throw new Error("not implemented");
-};
+export const getItemLevel: GetItemLevel = (state, id) => state.levels[id];
 
 /** Helpers and leveled upgrades are repeatable, so they are never "owned" (design D14). */
 function isOwned(state: GameState, item: ShopItem): boolean {
@@ -194,9 +204,9 @@ function isOwned(state: GameState, item: ShopItem): boolean {
     case "click-upgrade":
       return state.upgrades.includes(item.id);
     case "feature-upgrade":
-      throw new Error("not implemented");
+      return state.upgrades.includes(item.id);
     case "leveled-upgrade":
-      throw new Error("not implemented");
+      return false;
     case "helper":
       return false;
   }
@@ -206,6 +216,10 @@ export const getItemStatus: GetItemStatus = (state, id) => {
   const item = getShopItem(id);
   if (isOwned(state, item)) {
     return "owned";
+  }
+  // A fully leveled upgrade reads "maxed" even before its reveal threshold (design D14).
+  if (item.kind === "leveled-upgrade" && state.levels[item.id] >= item.maxLevel) {
+    return "maxed";
   }
   if (!isItemRevealed(state, id)) {
     return "hidden";
@@ -283,8 +297,22 @@ export const buyItem: BuyItem = (state, id, options) => {
         },
       };
     case "feature-upgrade":
-      throw new Error("not implemented");
+      return {
+        ok: true,
+        state: {
+          ...state,
+          balance,
+          upgrades: sortByCatalog([...state.upgrades, item.id]),
+        },
+      };
     case "leveled-upgrade":
-      throw new Error("not implemented");
+      return {
+        ok: true,
+        state: {
+          ...state,
+          balance,
+          levels: { ...state.levels, [item.id]: state.levels[item.id] + 1 },
+        },
+      };
   }
 };

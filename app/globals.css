@@ -359,6 +359,150 @@ body {
   }
 }
 
+/* Stage 3 effects (add-upgrades-v2, design D12, D18): crit feedback, golden button, helpers. */
+
+/* Only this layer shakes; `<main>` and every fixed element stay put (design D12). */
+.shake-layer {
+  animation-name: none;
+}
+
+.shake-layer.is-crit {
+  animation: crit-shake 300ms ease-in-out;
+}
+
+@keyframes crit-shake {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  20% {
+    transform: translate(-6px, 2px);
+  }
+  40% {
+    transform: translate(5px, -3px);
+  }
+  60% {
+    transform: translate(-4px, 3px);
+  }
+  80% {
+    transform: translate(3px, -2px);
+  }
+}
+
+.crit-text {
+  animation: crit-pop 900ms ease-out forwards;
+}
+
+@keyframes crit-pop {
+  0% {
+    transform: translate(-50%, 10px) scale(0.6);
+    opacity: 0;
+  }
+  25% {
+    transform: translate(-50%, -4px) scale(1.2);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -48px) scale(1);
+    opacity: 0;
+  }
+}
+
+.crit-flash {
+  background: radial-gradient(circle, rgba(250, 204, 21, 0.9), rgba(250, 204, 21, 0));
+  opacity: 0;
+  animation: crit-flash 400ms ease-out forwards;
+}
+
+@keyframes crit-flash {
+  0% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+.crit-particle {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 10px;
+  height: 10px;
+  margin: -5px 0 0 -5px;
+  border-radius: 50%;
+  background: #facc15;
+  animation: crit-burst 700ms ease-out forwards;
+}
+
+@keyframes crit-burst {
+  0% {
+    transform: rotate(var(--crit-angle, 0deg)) translateX(0) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(var(--crit-angle, 0deg)) translateX(120px) scale(0.3);
+    opacity: 0;
+  }
+}
+
+/* The golden button itself never animates, so Playwright can click it (design D18). */
+.golden-button {
+  background: radial-gradient(circle at 35% 30%, #fde68a, #f59e0b 60%, #b45309);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.5);
+  border: 2px solid #fbbf24;
+}
+
+.golden-button-glow {
+  position: absolute;
+  inset: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.85), rgba(255, 255, 255, 0));
+  animation: golden-pulse 1200ms ease-in-out infinite;
+}
+
+@keyframes golden-pulse {
+  0%,
+  100% {
+    transform: scale(0.8);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+@keyframes robot-press {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(3px) scale(0.94);
+  }
+}
+
+.helper-robot-press {
+  display: inline-block;
+  animation: robot-press 600ms ease-in-out infinite;
+}
+
+@keyframes factory-press {
+  0%,
+  100% {
+    transform: translateY(0) scaleX(1);
+  }
+  50% {
+    transform: translateY(2px) scaleX(1.04);
+  }
+}
+
+.helper-factory-press {
+  display: inline-block;
+  animation: factory-press 400ms ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .main-button {
     transition-duration: 0s;
@@ -373,9 +517,24 @@ body {
   .skin-jumping-cap,
   .helper-monkey,
   .helper-monkey *,
+  .helper-robot,
+  .helper-robot *,
+  .helper-factory,
+  .helper-factory *,
   .decor,
-  .decor * {
+  .decor *,
+  .shake-layer,
+  .shake-layer.is-crit,
+  .crit-text,
+  .crit-flash,
+  .golden-button,
+  .golden-button * {
     animation: none;
+  }
+
+  /* Reduced motion still shows the crit, just static: the flash stays visible for its 900 ms. */
+  .crit-flash {
+    opacity: 0.5;
   }
 }
 
@@ -393,7 +552,22 @@ body {
 [data-motion="reduced"] .skin-jumping-cap,
 [data-motion="reduced"] .helper-monkey,
 [data-motion="reduced"] .helper-monkey *,
+[data-motion="reduced"] .helper-robot,
+[data-motion="reduced"] .helper-robot *,
+[data-motion="reduced"] .helper-factory,
+[data-motion="reduced"] .helper-factory *,
 [data-motion="reduced"] .decor,
-[data-motion="reduced"] .decor * {
+[data-motion="reduced"] .decor *,
+[data-motion="reduced"] .shake-layer,
+[data-motion="reduced"] .shake-layer.is-crit,
+[data-motion="reduced"] .crit-text,
+[data-motion="reduced"] .crit-flash,
+[data-motion="reduced"] .golden-button,
+[data-motion="reduced"] .golden-button * {
   animation: none;
+}
+
+/* Reduced motion still shows the crit, just static: the flash stays visible for its 900 ms. */
+[data-motion="reduced"] .crit-flash {
+  opacity: 0.5;
 }

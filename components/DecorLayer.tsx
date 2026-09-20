@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { decorRect, placeDecor } from "@/lib/game/decor";
 import { getShopItem } from "@/lib/game/shop";
 import type { DecorId, DecorItem, DecorPosition, PlacedDecor, Rect, Size } from "@/lib/game/types";
+import { pageRandom } from "./page-random";
 import { usePreferences } from "./PreferencesProvider";
 import type { TranslationKey } from "@/lib/i18n";
 
@@ -9,9 +10,17 @@ interface DecorLayerProps {
   readonly decor: readonly PlacedDecor[];
 }
 
-/** Elements a decor item must not cover; measured at purchase time (design D10). */
-// `balance-area` is the fixed-height counter wrapper, not only the number span inside it.
-const RESERVED_TEST_IDS = ["main-button", "balance-area", "shop", "helpers", "reset"];
+/** Elements a decor item must not cover; measured at purchase time (design D10, D13). */
+// `balance-area` is the fixed-height counter wrapper, not only the number span inside it;
+// `click-status` is the Stage 3 slot right of the main button (combo meter, golden bonus).
+const RESERVED_TEST_IDS = [
+  "main-button",
+  "balance-area",
+  "shop",
+  "helpers",
+  "reset",
+  "click-status",
+];
 
 function sizeOf(id: DecorId): Size {
   return (getShopItem(id) as DecorItem).size;
@@ -26,7 +35,7 @@ function rectOf(element: Element): Rect {
  * Reserved areas for a new decor item: the fixed UI plus every decor already on screen. The shop
  * is reserved with its maximum height (60 vh), so later reveals cannot grow into a decor (D10).
  */
-function reservedRects(placed: readonly PlacedDecor[], viewport: Size): Rect[] {
+export function reservedRects(placed: readonly PlacedDecor[], viewport: Size): Rect[] {
   const rects: Rect[] = [];
   for (const testId of RESERVED_TEST_IDS) {
     const element = document.querySelector(`[data-testid="${testId}"]`);
@@ -63,7 +72,7 @@ export function chooseDecorPosition(
     viewport,
     size: sizeOf(id),
     reserved: reservedRects(placed, viewport),
-    random: Math.random,
+    random: pageRandom,
   });
 }
 
@@ -101,7 +110,7 @@ function DecorArt({ id }: { readonly id: DecorId }) {
 }
 
 /** Re-renders on resize so `decorRect` can clamp the saved fraction into the new viewport (D9). */
-function useViewport(): Size | null {
+export function useViewport(): Size | null {
   const [viewport, setViewport] = useState<Size | null>(null);
 
   useEffect(() => {

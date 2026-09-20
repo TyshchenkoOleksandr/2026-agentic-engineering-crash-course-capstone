@@ -20,14 +20,18 @@ export const SPEED_UP_OF: Readonly<Record<HelperId, SpeedUpId>> = Object.freeze(
   factory: "speed-factory",
 });
 
-export const getHelperRate: GetHelperRate = () => {
-  throw new Error("not implemented");
+/** Clicks per second of one helper type, doubled per speed-up level (design D4). */
+export const getHelperRate: GetHelperRate = (state, id) => {
+  const item = SHOP_CATALOG.find((entry) => entry.kind === "helper" && entry.id === id);
+  if (item === undefined || item.kind !== "helper") {
+    throw new Error(`unknown helper: ${id}`);
+  }
+  return state.helpers[id] * item.clicksPerSecond * 2 ** state.levels[SPEED_UP_OF[id]];
 };
 
 export const getHelperClicksPerSecond: GetHelperClicksPerSecond = (state) =>
   SHOP_CATALOG.reduce(
-    (total, item) =>
-      item.kind === "helper" ? total + state.helpers[item.id] * item.clicksPerSecond : total,
+    (total, item) => (item.kind === "helper" ? total + getHelperRate(state, item.id) : total),
     0,
   );
 
