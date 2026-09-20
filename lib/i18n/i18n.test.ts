@@ -3,9 +3,9 @@ import { t, formatNumber, uk, en } from "./index";
 import type { TranslationKey } from "./index";
 
 /** U+2019 — the Ukrainian apostrophe (design D21). Written as an escape to stay unambiguous. */
-const APOSTROPHE = "'";
+const APOSTROPHE = "\u2019";
 /** U+00A0 — no-break space: before a percent sign in Ukrainian copy and as thousands separator. */
-const NBSP = " ";
+const NBSP = "\u00a0";
 
 /**
  * The confirmed copy of `specs/localization/spec.md` (add-content-v3), rows 1–160 in table order.
@@ -318,7 +318,7 @@ describe("lib/i18n", () => {
 
       it("should use the typographic apostrophe U+2019 in Ukrainian copy", () => {
         expect(uk["item.soft-shadow.name"]).toBe(`М${APOSTROPHE}яка тінь`);
-        expect(uk["item.soft-shadow.name"]).toContain("'");
+        expect(uk["item.soft-shadow.name"]).toContain(APOSTROPHE);
         expect(uk["item.soft-shadow.name"]).not.toContain("'");
         expect(uk["item.golden-button.description"]).toContain(`з${APOSTROPHE}являється`);
         expect(uk["item.golden-button.description"]).not.toContain("'");
@@ -449,7 +449,7 @@ describe("lib/i18n", () => {
         expect([...text].filter((char) => char === "%")).toHaveLength(3);
         [...text].forEach((char, index) => {
           if (char === "%") {
-            expect(text[index - 1], `char before % at ${index}`).toBe(" ");
+            expect(text[index - 1], `char before % at ${index}`).toBe(NBSP);
           }
         });
         expect(text).not.toMatch(/\d %/);
@@ -459,7 +459,7 @@ describe("lib/i18n", () => {
       it("should write English percentages without a space", () => {
         const text = t("en", "item.crit.description");
         expect(text).toBe("Chance for a click to count ×10: 5% → 10% → 15%");
-        expect(text).not.toContain(" ");
+        expect(text).not.toContain(NBSP);
       });
     });
 
@@ -469,7 +469,7 @@ describe("lib/i18n", () => {
         expect(t("en", "shop.level", { level: 3, max: 3 })).toBe("Level 3 of 3");
         expect(t("uk", "combo.label", { value: "1,5" })).toBe("Комбо ×1,5");
         expect(t("en", "combo.label", { value: "2" })).toBe("Combo ×2");
-        expect(t("uk", "golden.bonus", { seconds: 30 })).toBe("Золатий бонус ×7: 30 с");
+        expect(t("uk", "golden.bonus", { seconds: 30 })).toBe("Золотий бонус ×7: 30 с");
         expect(t("en", "golden.bonus", { seconds: 29 })).toBe("Golden bonus ×7: 29 s");
         expect(t("uk", "helper.robot.label", { count: 1, rate: 5 })).toBe(
           "Роботи: 1 (+5 за секунду)",

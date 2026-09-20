@@ -840,7 +840,7 @@ test.describe("game-persistence", () => {
     await expect
       .poll(() => readSave(page))
       .toMatchObject({
-        version: 3,
+        version: 4,
         state: {
           upgrades: ["combo", "golden-button"],
           helpers: { monkey: 0, robot: 1, factory: 0 },

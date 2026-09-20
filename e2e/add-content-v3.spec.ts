@@ -806,6 +806,12 @@ test.describe("video-decor", () => {
 
   test("No network falls back to the placeholder", async ({ page }) => {
     embedStub = await abortEmbeds(page);
+    // An aborted request still fires `load` on the iframe's error page, so the page cannot tell it
+    // failed; navigator.onLine is the signal the app reacts to (design D7). Faking it in the page
+    // keeps localhost reachable, which context.setOffline would not.
+    await page.addInitScript(() => {
+      Object.defineProperty(window.navigator, "onLine", { get: () => false, configurable: true });
+    });
     await page.clock.install();
     await seedV4(
       page,
