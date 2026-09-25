@@ -41,7 +41,7 @@
 //                               CreateGoldenState, TickGolden, CatchGolden, GetGoldenBonus
 //                                                                             (Stage 3, new)
 //   lib/game/press.ts        -> CreateClickRuntime, PressMainButton          (Stage 3, new)
-//   lib/game/videos.ts       -> VIDEO_DECOR, VIDEO_SIZE, MAX_ACTIVE_VIDEOS, VIDEO_LOAD_TIMEOUT_MS,
+//   lib/game/videos.ts       -> VIDEO_DECOR, VIDEO_SIZE, VIDEO_LOAD_TIMEOUT_MS,
 //                               VIDEO_EMBED_HOST, GetVideoEntry, BuildEmbedUrl, GetActiveVideos
 //                                                                             (Stage 4, new)
 //   lib/game/achievements.ts -> ACHIEVEMENTS, ACHIEVEMENT_TOAST_MS, ACHIEVEMENT_TOAST_GAP_MS,
@@ -104,7 +104,8 @@ export type VideoDecorId =
   | "video-marble"
   | "video-aquarium"
   | "video-fireplace"
-  | "video-rain";
+  | "video-rain"
+  | "video-seal";
 
 /** One-time click multipliers (Stage 2). */
 export type ClickUpgradeId = "double-click" | "triple-click";
@@ -1004,7 +1005,7 @@ export type GetVideoEntry = (id: VideoDecorId) => VideoEntry;
  * `startSeconds` is an integer > 0 (design D6). Pure: no DOM, no network.
  */
 export type BuildEmbedUrl = (entry: VideoEntry) => string;
-/** First MAX_ACTIVE_VIDEOS placed videos with a non-null position, in the given order (design D5). */
+/** Every placed video with a non-null position, in the given order. */
 export type GetActiveVideos = (placed: readonly PlacedVideo[]) => readonly PlacedVideo[];
 
 // achievements.ts (Stage 4)

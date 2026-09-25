@@ -668,8 +668,8 @@ test.describe("video-decor", () => {
     await page.getByTestId("shop-buy-video-runner").click();
     await expect(page.getByTestId("balance")).toHaveText("0");
     const box = await boxOf(page.getByTestId("video-runner"));
-    expect(Math.abs(box.width - 192)).toBeLessThanOrEqual(1);
-    expect(Math.abs(box.height - 108)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.width - 384)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.height - 216)).toBeLessThanOrEqual(1);
     await expectNoOverlapWith(page, box, VIDEO_NEIGHBOURS);
 
     const state = await readSavedState(page);
@@ -732,10 +732,10 @@ test.describe("video-decor", () => {
     const box = await boxOf(video);
     expect(Math.abs(box.x - 1024)).toBeLessThanOrEqual(1);
     expect(Math.abs(box.y - 72)).toBeLessThanOrEqual(1);
-    expect(Math.abs(box.width - 192)).toBeLessThanOrEqual(1);
-    expect(Math.abs(box.height - 108)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.width - 384)).toBeLessThanOrEqual(1);
+    expect(Math.abs(box.height - 216)).toBeLessThanOrEqual(1);
     await expect(video).toHaveRole("group");
-    await expect(video).toHaveAccessibleName("Відео: Різання мила");
+    await expect(video).toHaveAccessibleName("Відео: Різання води");
   });
 
   test("A video never blocks the main button", async ({ page }) => {
@@ -775,7 +775,7 @@ test.describe("video-decor", () => {
     expect(embedStub.count()).toBe(1);
   });
 
-  test("At most three frames exist", async ({ page }) => {
+  test("Every placed video mounts a frame", async ({ page }) => {
     await seedV4(
       page,
       S({
@@ -792,15 +792,9 @@ test.describe("video-decor", () => {
     await page.goto("/");
     await waitForLoaded(page);
 
-    await expect(page.getByTestId("video-frame")).toHaveCount(3);
-    for (const id of ["video-runner", "video-parkour", "video-soap"]) {
+    await expect(page.getByTestId("video-frame")).toHaveCount(5);
+    for (const id of ["video-runner", "video-parkour", "video-soap", "video-slime", "video-rain"]) {
       await expect(page.getByTestId(id).getByTestId("video-frame")).toHaveCount(1);
-    }
-    for (const id of ["video-slime", "video-rain"]) {
-      const root = page.getByTestId(id);
-      await expect(root).toHaveAttribute("data-video-state", "idle");
-      await expect(root.locator("iframe")).toHaveCount(0);
-      await expect(root.getByTestId("video-placeholder")).toBeVisible();
     }
   });
 
@@ -855,7 +849,7 @@ test.describe("video-decor", () => {
     await pauseClock(page);
 
     await page.clock.runFor(2000);
-    expect(embedStub.count()).toBe(3);
+    expect(embedStub.count()).toBe(5);
   });
 
   test("No unstubbed external request is made", async ({ page }) => {
@@ -1143,12 +1137,12 @@ test.describe("shop", () => {
     await waitForLoaded(page);
 
     const item = page.getByTestId("shop-item-video-soap");
-    await expect(item).toContainText("Різання мила");
-    await expect(item).toContainText("Гіпнотичні нарізки мила");
+    await expect(item).toContainText("Різання води");
+    await expect(item).toContainText("Ніж ріже воду");
 
     await page.getByTestId("lang-toggle").click();
-    await expect(item).toContainText("Soap cutting");
-    await expect(item).toContainText("Hypnotic soap-cutting loops");
+    await expect(item).toContainText("Cutting water");
+    await expect(item).toContainText("A knife cutting through water");
     await expect(page.getByTestId("shop-category-video")).toHaveText("Video");
   });
 });

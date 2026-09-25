@@ -116,8 +116,9 @@ describe("shop: Shop catalog", () => {
       "video-aquarium",
       "video-fireplace",
       "video-rain",
+      "video-seal",
     ]);
-    expect(SHOP_CATALOG.length).toBe(29);
+    expect(SHOP_CATALOG.length).toBe(30);
     expect(
       SHOP_CATALOG.filter((item) => item.kind === "video-decor").map((item) => item.id),
     ).toEqual(VIDEO_DECOR.map((v) => v.id));
@@ -263,23 +264,24 @@ describe("shop: Shop catalog", () => {
           ["video-aquarium", 30000, 18000],
           ["video-fireplace", 40000, 24000],
           ["video-rain", 50000, 30000],
+          ["video-seal", 60000, 36000],
         ] as const
       ).map(([id, price, revealAt]) => ({
         kind: "video-decor",
         id,
         category: "video",
-        size: { width: 192, height: 108 },
+        size: { width: 384, height: 216 },
         price,
         revealAt,
       })),
     ]);
 
-    expect(VIDEO_SIZE).toEqual({ width: 192, height: 108 });
+    expect(VIDEO_SIZE).toEqual({ width: 384, height: 216 });
     expect(getShopItem("video-runner")).toEqual({
       kind: "video-decor",
       id: "video-runner",
       category: "video",
-      size: { width: 192, height: 108 },
+      size: { width: 384, height: 216 },
       price: 5000,
       revealAt: 3000,
     });
@@ -287,7 +289,7 @@ describe("shop: Shop catalog", () => {
       kind: "video-decor",
       id: "video-rain",
       category: "video",
-      size: { width: 192, height: 108 },
+      size: { width: 384, height: 216 },
       price: 50000,
       revealAt: 30000,
     });
@@ -414,6 +416,7 @@ describe("shop: Progressive reveal", () => {
     ["video-aquarium", 18000],
     ["video-fireplace", 24000],
     ["video-rain", 30000],
+    ["video-seal", 36000],
   ] as const)("Reveal boundaries for every item: %s at %i", (id, revealAt) => {
     expect(isItemRevealed(S({ totalClicks: revealAt - 1 }), id)).toBe(false);
     expect(isItemRevealed(S({ totalClicks: revealAt }), id)).toBe(true);
@@ -491,6 +494,9 @@ describe("shop: Progressive reveal", () => {
       "video-slime",
     ]);
     expect(ids(getRevealedItems(S({ totalClicks: 30000 }), "video"))).toEqual(
+      VIDEO_DECOR.map((v) => v.id).filter((id) => id !== "video-seal"),
+    );
+    expect(ids(getRevealedItems(S({ totalClicks: 36000 }), "video"))).toEqual(
       VIDEO_DECOR.map((v) => v.id),
     );
   });

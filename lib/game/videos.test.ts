@@ -3,7 +3,6 @@ import {
   buildEmbedUrl,
   getActiveVideos,
   getVideoEntry,
-  MAX_ACTIVE_VIDEOS,
   VIDEO_DECOR,
   VIDEO_EMBED_HOST,
   VIDEO_LOAD_TIMEOUT_MS,
@@ -26,12 +25,27 @@ const CATALOG_IDS: readonly VideoDecorId[] = [
   "video-aquarium",
   "video-fireplace",
   "video-rain",
+  "video-seal",
 ];
+
+const EXPECTED_IDS = [
+  "vTfD20dbxho",
+  "VahKXgW2nXc",
+  "ZnC9zqn9rBY",
+  "f1-2xRx2gnE",
+  "-MJi7T4lX80",
+  "AKeUssuu3Is",
+  "1cmsiBKoLtE",
+  "uJaqnJ6-xfY",
+  "1MGlTgSnsE4",
+  "n_Dv4JMiwK8",
+  "h9uFQv3t1AU",
+] as const;
 
 const EXPECTED_ENTRIES: readonly VideoEntry[] = CATALOG_IDS.map((id, index) => ({
   id,
   provider: "youtube-nocookie",
-  videoId: `PLACEHLDR${String(index + 1).padStart(2, "0")}`,
+  videoId: EXPECTED_IDS[index],
 }));
 
 function placed(id: VideoDecorId, x: number | null, y = 0.5): PlacedVideo {
@@ -55,8 +69,7 @@ function deepFreeze<T>(value: T): T {
 describe("video-decor: Video catalog module", () => {
   it("Catalog ids, order and constants", () => {
     expect(VIDEO_DECOR.map((v) => v.id)).toEqual(CATALOG_IDS);
-    expect(VIDEO_SIZE).toStrictEqual({ width: 192, height: 108 });
-    expect(MAX_ACTIVE_VIDEOS).toBe(3);
+    expect(VIDEO_SIZE).toStrictEqual({ width: 384, height: 216 });
     expect(VIDEO_LOAD_TIMEOUT_MS).toBe(5000);
     expect(VIDEO_EMBED_HOST).toBe("https://www.youtube-nocookie.com");
   });
@@ -66,12 +79,12 @@ describe("video-decor: Video catalog module", () => {
     expect(getVideoEntry("video-runner")).toEqual({
       id: "video-runner",
       provider: "youtube-nocookie",
-      videoId: "PLACEHLDR01",
+      videoId: "vTfD20dbxho",
     });
-    expect(getVideoEntry("video-rain")).toEqual({
-      id: "video-rain",
+    expect(getVideoEntry("video-seal")).toEqual({
+      id: "video-seal",
       provider: "youtube-nocookie",
-      videoId: "PLACEHLDR10",
+      videoId: "h9uFQv3t1AU",
     });
     for (const entry of VIDEO_DECOR) {
       expect(getVideoEntry(entry.id)).toEqual(entry);
@@ -94,8 +107,8 @@ describe("video-decor: Video catalog module", () => {
 describe("video-decor: Embed URL", () => {
   it("Default parameters", () => {
     expect(buildEmbedUrl(getVideoEntry("video-runner"))).toBe(
-      "https://www.youtube-nocookie.com/embed/PLACEHLDR01?autoplay=1&mute=1&loop=1" +
-        "&playlist=PLACEHLDR01&controls=0&modestbranding=1&playsinline=1&rel=0" +
+      "https://www.youtube-nocookie.com/embed/vTfD20dbxho?autoplay=1&mute=1&loop=1" +
+        "&playlist=vTfD20dbxho&controls=0&modestbranding=1&playsinline=1&rel=0" +
         "&disablekb=1&iv_load_policy=3",
     );
   });
@@ -136,16 +149,16 @@ describe("video-decor: Embed URL", () => {
 });
 
 // ---------------------------------------------------------------------------
-// At most three active videos
+// Every placed video is active
 // ---------------------------------------------------------------------------
 
-describe("video-decor: At most three active videos", () => {
+describe("video-decor: Every placed video is active", () => {
   it("Fewer than the cap", () => {
     const input = [placed("video-runner", 0.1, 0.1), placed("video-soap", 0.2, 0.2)];
     expect(getActiveVideos(input).map((v) => v.id)).toEqual(["video-runner", "video-soap"]);
   });
 
-  it("The cap holds", () => {
+  it("Every placed video stays active", () => {
     const input = [
       placed("video-runner", 0.1),
       placed("video-parkour", 0.2),
@@ -157,6 +170,8 @@ describe("video-decor: At most three active videos", () => {
       "video-runner",
       "video-parkour",
       "video-soap",
+      "video-slime",
+      "video-rain",
     ]);
   });
 

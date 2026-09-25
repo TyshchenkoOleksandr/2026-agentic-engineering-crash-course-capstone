@@ -534,8 +534,17 @@ keyframes of their own (the content moves, the box does not).
   unit-tested with the worst case (29 unlocking the 30th).
 - [Colour assertions in e2e are brittle] → they assert ratios and inequalities computed by a
   unit-tested module, never exact strings.
-- [Up to three iframes still cost CPU] → `MAX_ACTIVE_VIDEOS = 3`, muted, `loading="lazy"`,
-  `IntersectionObserver` gating, no autoplay under reduced motion.
+- [Up to three iframes still cost CPU] → superseded on 2026-09-25 by D23: every placed video may mount, still muted, `loading="lazy"`, `IntersectionObserver` gating, no autoplay under reduced motion.
+
+## D23. Follow-up confirmed 2026-09-25
+
+The human replaced the placeholder catalog, dropped the three-frame cap, enlarged the frames, and required that video boxes do not overlap.
+
+- `VIDEO_DECOR` is eleven entries. Internal ids stay (`video-runner` … `video-rain`, plus `video-seal`) so old saves keep their slots. `videoId` values are the human's list, in order: `vTfD20dbxho`, `VahKXgW2nXc`, `ZnC9zqn9rBY`, `f1-2xRx2gnE`, `-MJi7T4lX80`, `AKeUssuu3Is`, `1cmsiBKoLtE`, `uJaqnJ6-xfY`, `1MGlTgSnsE4`, `n_Dv4JMiwK8`, `h9uFQv3t1AU`.
+- Prices of the first ten stay as in D4. `video-seal` costs 60 000 and appears at 36 000 (`0.6 × price`). `videos-all` threshold is 11.
+- `VIDEO_SIZE` is `{ width: 384, height: 216 }`. `MAX_ACTIVE_VIDEOS` is removed. `getActiveVideos` returns every entry whose position is not null.
+- `separatePlacedVideos(videos, viewport)` returns a new list. The first placed video keeps its position. Each later placed video is shifted, in 8 px steps, until its `VIDEO_SIZE` box does not strictly overlap an earlier placed box or the viewport edge. A `null` position stays `null`. The input is not mutated. Rendering and the next purchase both use this list, so a buy cannot land on a box that was only moved on screen.
+- The achievements dialog closes from a cross button (`data-testid="achievements-close"`, accessible name still `achievements.close`). An unlocked row is green (`data-unlocked="true"`) and shows a check. Each achievement has its own icon.
 
 ## Migration Plan
 

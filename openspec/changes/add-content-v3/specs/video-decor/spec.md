@@ -173,3 +173,24 @@ scenarios), so the suite runs offline and deterministically (DECISION (confirmed
 - **WHEN** the page `/` is loaded, the user clicks the main button once and 2 000 ms pass
 - **THEN** every recorded request URL has host `localhost` (the dev server) or `www.youtube-nocookie.com`
 - **AND** every `www.youtube-nocookie.com` request was served by the stub route (its handler call count equals the number of such requests)
+
+## MODIFIED Requirements
+
+### Requirement: Revised catalog, size and no frame cap
+Supersedes the ten-item placeholder catalog, `VIDEO_SIZE` 192×108, and `MAX_ACTIVE_VIDEOS = 3` (design D23, confirmed 2026-09-25). `VIDEO_DECOR` SHALL be the eleven entries of D23 in that order. `VIDEO_SIZE` SHALL be `{ width: 384, height: 216 }`. `getActiveVideos` SHALL return every entry with a non-null position, in order, with no cap. `videos-all` threshold SHALL be 11. `video-seal` SHALL cost 60 000 and reveal at 36 000.
+
+#### Scenario: Eleven real ids [unit]
+- **THEN** `VIDEO_DECOR` has length 11, `VIDEO_DECOR[0].videoId` is `vTfD20dbxho`, `VIDEO_DECOR[10]` is `{ id: "video-seal", provider: "youtube-nocookie", videoId: "h9uFQv3t1AU" }`, and `VIDEO_SIZE` deep-equals `{ width: 384, height: 216 }`
+
+#### Scenario: Five placed videos all mount [e2e]
+- **GIVEN** storage is seeded with five placed videos (`video-runner`, `video-parkour`, `video-soap`, `video-slime`, `video-rain`)
+- **WHEN** the page `/` is loaded
+- **THEN** `[data-testid="video-frame"]` has count 5
+
+### Requirement: Placed videos do not overlap
+`separatePlacedVideos(videos, viewport)` SHALL return a new list of the same length. A `null` position stays `null`. The first video that has a position keeps it. Each later positioned video is moved until `rectsOverlap` is false against every earlier positioned box of `VIDEO_SIZE`, and the box stays inside the viewport. The input list is not mutated. The screen and the next purchase SHALL use this list.
+
+#### Scenario: Two videos on the same spot are separated [unit]
+- **GIVEN** viewport `{ width: 1280, height: 720 }` and videos `video-runner` and `video-parkour` both at `{ x: 0.1, y: 0.1 }`
+- **WHEN** `separatePlacedVideos` runs
+- **THEN** the first position is unchanged, the two `VIDEO_SIZE` boxes do not strictly overlap, and the input array is unchanged

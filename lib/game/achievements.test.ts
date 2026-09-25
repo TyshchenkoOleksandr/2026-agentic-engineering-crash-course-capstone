@@ -164,7 +164,7 @@ const CATALOG: readonly Achievement[] = [
   { id: "decor-all", category: "decor", metric: "decorOwned", threshold: 3 },
   { id: "cat-nap", category: "decor", metric: "catOwned", threshold: 1 },
   { id: "first-video", category: "video", metric: "videosOwned", threshold: 1 },
-  { id: "videos-all", category: "video", metric: "videosOwned", threshold: 10 },
+  { id: "videos-all", category: "video", metric: "videosOwned", threshold: 11 },
   { id: "first-helper", category: "helpers", metric: "helpersTotal", threshold: 1 },
   { id: "helpers-10", category: "helpers", metric: "helpersTotal", threshold: 10 },
   { id: "factory-owner", category: "helpers", metric: "factories", threshold: 1 },

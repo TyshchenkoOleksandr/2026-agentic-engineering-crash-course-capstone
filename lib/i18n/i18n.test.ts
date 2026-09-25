@@ -82,26 +82,28 @@ const COPY: ReadonlyArray<readonly [TranslationKey, string, string]> = [
   ["golden.bonus", "Золотий бонус ×7: {seconds} с", "Golden bonus ×7: {seconds} s"], // 68
   // Stage 4 (add-content-v3) - video category and items
   ["shop.category.video", "Відео", "Video"], // 69
-  ["item.video-runner.name", "Нескінченний ранер", "Endless runner"], // 70
-  ["item.video-runner.description", "Довгий геймплей у фоні", "A long gameplay loop in the background"], // 71
-  ["item.video-parkour.name", "Паркур", "Parkour"], // 72
-  ["item.video-parkour.description", "Стрибки по блоках без кінця", "Endless block-hopping"], // 73
-  ["item.video-soap.name", "Різання мила", "Soap cutting"], // 74
-  ["item.video-soap.description", "Гіпнотичні нарізки мила", "Hypnotic soap-cutting loops"], // 75
-  ["item.video-kinetic-sand.name", "Кінетичний пісок", "Kinetic sand"], // 76
-  ["item.video-kinetic-sand.description", "Ніж ріже кольоровий пісок", "A knife slicing colourful sand"], // 77
-  ["item.video-slime.name", "Слайм", "Slime"], // 78
-  ["item.video-slime.description", "Повільне місіння слайму", "Slow slime mixing"], // 79
-  ["item.video-hydraulic.name", "Прес у відео", "Press on video"], // 80
-  ["item.video-hydraulic.description", "Прес чавить усе підряд", "A press crushing one thing after another"], // 81
-  ["item.video-marble.name", "Мармурові доріжки", "Marble run"], // 82
-  ["item.video-marble.description", "Кульки котяться нескінченним треком", "Marbles rolling down an endless track"], // 83
-  ["item.video-aquarium.name", "Акваріум", "Aquarium"], // 84
-  ["item.video-aquarium.description", "Риби плавають за склом", "Fish swimming behind glass"], // 85
+  ["item.video-runner.name", "Subway Surfers", "Subway Surfers"], // 70
+  ["item.video-runner.description", "Довгий забіг у фоні", "A long run in the background"], // 71
+  ["item.video-parkour.name", "Гідравлічний прес", "Hydraulic press"], // 72
+  ["item.video-parkour.description", "Прес чавить усе підряд", "A press crushing one thing after another"], // 73
+  ["item.video-soap.name", "Різання води", "Cutting water"], // 74
+  ["item.video-soap.description", "Ніж ріже воду", "A knife cutting through water"], // 75
+  ["item.video-kinetic-sand.name", "Качка на прогулянці", "Duck on a walk"], // 76
+  ["item.video-kinetic-sand.description", "Качка гуляє без кінця", "A duck walking on and on"], // 77
+  ["item.video-slime.name", "Медитація Відьмака", "Witcher meditation"], // 78
+  ["item.video-slime.description", "Спокійна медитація", "A quiet meditation"], // 79
+  ["item.video-hydraulic.name", "Краєвиди природи", "Nature views"], // 80
+  ["item.video-hydraulic.description", "Довгі краєвиди природи", "Long views of nature"], // 81
+  ["item.video-marble.name", "Найкращі кліпи", "Best clips"], // 82
+  ["item.video-marble.description", "Добірка найкращих кліпів", "A reel of the best clips"], // 83
+  ["item.video-aquarium.name", "Моменти NFL", "NFL highlights"], // 84
+  ["item.video-aquarium.description", "Яскраві моменти матчів", "Bright match moments"], // 85
   ["item.video-fireplace.name", "Камін", "Fireplace"], // 86
   ["item.video-fireplace.description", "Дрова тріщать у вогні", "Logs crackling in the fire"], // 87
-  ["item.video-rain.name", "Дощ у вікні", "Rain on a window"], // 88
-  ["item.video-rain.description", "Краплі стікають по склу", "Drops running down the glass"], // 89
+  ["item.video-rain.name", "Паркур у Minecraft", "Minecraft parkour"], // 88
+  ["item.video-rain.description", "Стрибки по блоках у Minecraft", "Block-hopping in Minecraft"], // 89
+  ["item.video-seal.name", "Тюлень, що крутиться", "Spinning seal"],
+  ["item.video-seal.description", "Тюлень крутиться по колу", "A seal spinning in circles"],
   // Video UI strings
   ["video.label", "Відео: {name}", "Video: {name}"], // 90
   ["video.offline", "Відео недоступне без мережі", "Video unavailable offline"], // 91
@@ -151,7 +153,7 @@ const COPY: ReadonlyArray<readonly [TranslationKey, string, string]> = [
   ["achievement.first-video.name", "Фоновий режим", "Background mode"], // 133
   ["achievement.first-video.description", "Купи перше відео", "Buy your first video"], // 134
   ["achievement.videos-all.name", "Марафон", "Marathon"], // 135
-  ["achievement.videos-all.description", "Купи всі 10 відео", "Buy all 10 videos"], // 136
+  ["achievement.videos-all.description", "Купи всі 11 відео", "Buy all 11 videos"], // 136
   ["achievement.first-helper.name", "Не сам", "Not alone"], // 137
   ["achievement.first-helper.description", "Купи першого помічника", "Buy your first helper"], // 138
   ["achievement.helpers-10.name", "Бригада", "Crew"], // 139
@@ -187,7 +189,7 @@ const expectedCopy = (key: TranslationKey): { uk: string; en: string } => {
   return { uk: row[1], en: row[2] };
 };
 
-/** The 29 shop item ids of Stage 1 + 2 + 3 + 4, in catalog order. */
+/** The 30 shop item ids of Stage 1 + 2 + 3 + 4, in catalog order. */
 const ITEM_IDS = [
   "soft-shadow",
   "squish",
@@ -218,6 +220,7 @@ const ITEM_IDS = [
   "video-aquarium",
   "video-fireplace",
   "video-rain",
+  "video-seal",
 ] as const;
 
 /** The 30 achievement ids, in catalog order. */
@@ -293,8 +296,8 @@ describe("lib/i18n", () => {
     describe("Scenario: Required Stage 1 keys and copy [unit]", () => {
       it("should contain exactly the 160 keys of the table", () => {
         const expectedKeys = COPY.map(([key]) => key).sort();
-        expect(expectedKeys).toHaveLength(160);
-        expect(new Set(expectedKeys).size).toBe(160);
+        expect(expectedKeys).toHaveLength(162);
+        expect(new Set(expectedKeys).size).toBe(162);
         expect(Object.keys(uk).sort()).toEqual(expectedKeys);
         expect(Object.keys(en).sort()).toEqual(expectedKeys);
       });
@@ -326,8 +329,8 @@ describe("lib/i18n", () => {
     });
 
     describe("Scenario: Every shop item has a name and description [unit]", () => {
-      it("should return the table copy for all lookups of the 29 items", () => {
-        expect(ITEM_IDS).toHaveLength(29);
+      it("should return the table copy for all lookups of the 30 items", () => {
+        expect(ITEM_IDS).toHaveLength(30);
         let lookups = 0;
         ITEM_IDS.forEach((id) => {
           (["name", "description"] as const).forEach((suffix) => {
@@ -338,7 +341,7 @@ describe("lib/i18n", () => {
             lookups += 2;
           });
         });
-        expect(lookups).toBe(116);
+        expect(lookups).toBe(120);
       });
     });
 
