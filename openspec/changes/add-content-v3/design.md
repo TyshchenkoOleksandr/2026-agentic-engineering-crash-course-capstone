@@ -561,6 +561,10 @@ The human removed Best clips, NFL highlights, and Fireplace (NFL blocks the embe
 
 `video-music` is the cheapest video. Descriptions: «Тиха музика табору» / «Quiet camp music»; «Трейлер запуску гри» / «The game's launch trailer»; «Посібник з бою для новачків» / «A beginner's combat guide». `video-marble`, `video-aquarium`, and `video-fireplace` leave the catalog and the id union. A save that still names them drops those entries on load.
 
+## D25. Expedition music is audible
+
+Confirmed 2026-09-25. Every other video stays `mute=1`. `video-music` keeps `mute=1` in the URL so the browser allows autoplay, and adds `enablejsapi=1`. Once the frame is playing, the page posts `unMute` and `playVideo` to that frame, and repeats them on the next pointer. Reduced motion still waits for the play button before the frame mounts.
+
 ## Migration Plan
 
 `MIGRATIONS = { 1: migrateV1ToV2, 2: migrateV2ToV3, 3: migrateV3ToV4 }`,

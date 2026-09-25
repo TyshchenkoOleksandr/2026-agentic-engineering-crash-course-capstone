@@ -110,9 +110,9 @@ The DVD logo is the only decor that moves across the whole screen instead of sta
 
 ### 2b. Video decor (stage 4)
 
-Third-party ambient videos, embedded as muted, looping `youtube-nocookie` iframes and placed like
-decor. Every bought video can mount a frame; without a network each one falls back to its own
-placeholder card, and under reduced motion nothing autoplays.
+Third-party ambient videos, embedded as looping `youtube-nocookie` iframes and placed like
+decor. Every frame starts muted so it can autoplay. Expedition music is then unmuted. Without a
+network each one falls back to its own placeholder card, and under reduced motion nothing autoplays.
 
 | Video | Price | Appears at |
 |---|---|---|

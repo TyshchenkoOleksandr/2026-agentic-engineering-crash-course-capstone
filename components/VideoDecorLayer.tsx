@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   buildEmbedUrl,
+  embedPlaybackCommands,
   getActiveVideos,
   getVideoEntry,
   VIDEO_LOAD_TIMEOUT_MS,
@@ -132,6 +133,28 @@ function VideoDecor({
 
   const handleLoad = useCallback(() => setOutcome("playing"), []);
   const handleError = useCallback(() => setOutcome("offline"), []);
+  const frameRef = useRef<HTMLIFrameElement>(null);
+
+  const sendPlayback = useCallback(() => {
+    const target = frameRef.current?.contentWindow;
+    if (!target) {
+      return;
+    }
+    for (const command of embedPlaybackCommands(entry.id)) {
+      target.postMessage(command, "*");
+    }
+  }, [entry.id]);
+
+  // Autoplay only starts while muted. Unmute Expedition music once it is playing, and again
+  // on the next click, because the browser drops the first unmute without a user gesture.
+  useEffect(() => {
+    if (state !== "playing" || embedPlaybackCommands(entry.id).length === 0) {
+      return;
+    }
+    sendPlayback();
+    window.addEventListener("pointerdown", sendPlayback);
+    return () => window.removeEventListener("pointerdown", sendPlayback);
+  }, [entry.id, sendPlayback, state]);
 
   const mounted = state === "loading" || state === "playing";
   // Catalog ids are still PLACEHLDR* (design D3). YouTube answers those with its own
@@ -179,6 +202,7 @@ function VideoDecor({
 
       {mounted && (
         <iframe
+          ref={frameRef}
           data-testid="video-frame"
           src={buildEmbedUrl(getVideoEntry(entry.id))}
           title={label}

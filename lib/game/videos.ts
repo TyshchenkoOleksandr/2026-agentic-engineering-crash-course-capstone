@@ -59,8 +59,23 @@ export const buildEmbedUrl: BuildEmbedUrl = (entry) => {
   if (typeof startSeconds === "number" && Number.isInteger(startSeconds) && startSeconds > 0) {
     params.push(`start=${startSeconds}`);
   }
+  // Expedition music starts muted so autoplay is allowed, then the frame is unmuted (design D25).
+  if (entry.id === "video-music") {
+    params.push("enablejsapi=1");
+  }
   return `${VIDEO_EMBED_HOST}/embed/${entry.videoId}?${params.join("&")}`;
 };
+
+/** YouTube IFrame API commands. Only Expedition music is unmuted. */
+export function embedPlaybackCommands(id: string): readonly string[] {
+  if (id !== "video-music") {
+    return [];
+  }
+  return [
+    JSON.stringify({ event: "command", func: "unMute", args: [] }),
+    JSON.stringify({ event: "command", func: "playVideo", args: [] }),
+  ];
+}
 
 export const getActiveVideos: GetActiveVideos = (placed) =>
   placed.filter((video) => video.position !== null);
