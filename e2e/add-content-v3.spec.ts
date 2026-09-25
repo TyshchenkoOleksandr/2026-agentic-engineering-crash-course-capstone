@@ -1082,12 +1082,12 @@ test.describe("page-decor", () => {
 
 test.describe("shop", () => {
   test("The video category appears in the shop", async ({ page }) => {
-    await seedV4(page, S({ balance: 0, totalClicks: 2999 }));
+    await seedV4(page, S({ balance: 0, totalClicks: 1499 }));
     await page.goto("/");
     await waitForLoaded(page);
 
     await expect(page.getByTestId("shop-category-video")).toHaveCount(0);
-    await expect(page.getByTestId("shop-item-video-runner")).toHaveCount(0);
+    await expect(page.getByTestId("shop-item-video-music")).toHaveCount(0);
 
     await page.evaluate(
       ([key, value]) => window.localStorage.setItem(key, value),
@@ -1103,7 +1103,11 @@ test.describe("shop", () => {
     const ids = await page
       .locator('[data-testid^="shop-item-video-"]')
       .evaluateAll((els) => els.map((el) => el.getAttribute("data-testid")));
-    expect(ids).toEqual(["shop-item-video-runner", "shop-item-video-parkour"]);
+    expect(ids).toEqual([
+      "shop-item-video-music",
+      "shop-item-video-runner",
+      "shop-item-video-parkour",
+    ]);
 
     const buy = page.getByTestId("shop-buy-video-runner");
     await expect(buy).toBeDisabled();
