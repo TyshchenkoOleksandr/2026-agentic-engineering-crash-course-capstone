@@ -15,8 +15,10 @@ starting values to tune during play-testing.
 ## Non-goals
 
 - No backend, accounts, leaderboards or `app/api` routes — everything runs in the browser.
-- No third-party videos or copyrighted footage (no Subway Surfers / Minecraft gameplay, no YouTube
-  embeds). All decorations are our own CSS / SVG / canvas animations.
+- We ship no copyrighted footage of our own; every decoration we draw is our own CSS / SVG / canvas
+  animation. The `video` decor category (stage 4, revived on 2026-09-20) embeds third-party players
+  whose ids the owner configures in `lib/game/videos.ts`, on the privacy-friendly
+  `www.youtube-nocookie.com` host, for their personal build.
 - No real money, ads or analytics.
 
 ## Screen layout
@@ -106,6 +108,30 @@ buttons or other decor; the position is saved so it does not jump on reload.
 
 The DVD logo is the only decor that moves across the whole screen instead of staying in one place.
 
+### 2b. Video decor (stage 4)
+
+Third-party ambient videos, embedded as muted, looping `youtube-nocookie` iframes and placed like
+decor. Every bought video can mount a frame; without a network each one falls back to its own
+placeholder card, and under reduced motion nothing autoplays.
+
+| Video | Price | Appears at |
+|---|---|---|
+| Subway Surfers | 5 000 | 3 000 |
+| Hydraulic press | 7 500 | 4 500 |
+| Cutting water | 10 000 | 6 000 |
+| Duck on a walk | 12 500 | 7 500 |
+| Witcher meditation | 15 000 | 9 000 |
+| Nature views | 20 000 | 12 000 |
+| Best clips | 25 000 | 15 000 |
+| NFL highlights | 30 000 | 18 000 |
+| Fireplace | 40 000 | 24 000 |
+| Minecraft parkour | 50 000 | 30 000 |
+| Spinning seal | 60 000 | 36 000 |
+
+Thirty cosmetic achievements (no reward of any kind) are listed in a panel and announced by a toast;
+they live outside the game save, in their own `dopamine-clicker:trophies` key, so a progress reset
+keeps the trophy case.
+
 ### 3. Click upgrades
 
 | Upgrade | Effect | Price |
@@ -155,8 +181,11 @@ automation is visible.
 2. **Shop v1:** shop unlock at 10, first skins (shadow, squish, +N, jumping cap, gold), 3 decor items
    (sleeping cat, lava lamp, hydraulic press), Double / Triple click, Monkey.
 3. **Upgrades v2:** Crit with its visual feedback, Combo, Golden button, Robot, Factory, speed-ups.
-4. ~~**Content:** remaining skins, sound packs and decor.~~ — dropped on 2026-09-20; the project ends
-   with stage 3. Stages 1-2 are implemented and archived (`add-foundation`, `add-shop-v1`).
+4. **Content v3:** revived on 2026-09-20 with a different scope than the original "remaining skins,
+   sound packs and decor" (that list stays out of scope): a recognizable sleeping-cat SVG, a Soft
+   shadow that is visible in dark mode, a readable Floating +N pill, ten third-party video decor
+   items and thirty cosmetic achievements. Stages 1-3 are implemented and archived
+   (`add-foundation`, `add-shop-v1`, `add-upgrades-v2`).
 
 Each stage becomes its own OpenSpec change with tests written first.
 

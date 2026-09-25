@@ -10,8 +10,15 @@ import { getButtonAppearance } from "@/lib/game/skins";
 import { isShopVisible } from "@/lib/game/shop";
 import { isBalanceVisible } from "@/lib/game/state";
 import type { DecorId, DecorPosition, ShopItem, SkinId } from "@/lib/game/types";
+import { AchievementsPanel } from "./AchievementsPanel";
+import { AchievementToast } from "./AchievementToast";
 import { BalanceCounter } from "./BalanceCounter";
-import { chooseDecorPosition, DecorLayer, reservedRects } from "./DecorLayer";
+import {
+  chooseDecorPosition,
+  chooseVideoPosition,
+  DecorLayer,
+  reservedRects,
+} from "./DecorLayer";
 import {
   buy,
   catchGoldenButton,
@@ -19,13 +26,18 @@ import {
   getSavedStateSnapshot,
   getServerRuntimeSnapshot,
   getServerSavedState,
+  getServerTrophiesSnapshot,
+  getTrophiesSnapshot,
   press,
   resetGame,
   subscribeRuntime,
   subscribeSavedState,
+  subscribeTrophies,
+  syncTrophiesOnLoad,
   tick,
   toggle,
 } from "./game-store";
+import { VideoDecorLayer } from "./VideoDecorLayer";
 import { GoldenButton } from "./GoldenButton";
 import { HelperZone } from "./HelperZone";
 import { LanguageToggle } from "./LanguageToggle";
@@ -38,6 +50,9 @@ import { ThemeToggle } from "./ThemeToggle";
 /** How long the crit feedback runs (design D12). */
 const CRIT_FX_MS = 900;
 
+/** Most time one tick may credit: three interval periods (design D16 of add-shop-v1, "no catch-up"). */
+const MAX_CATCH_UP_MS = 3 * HELPER_TICK_MS;
+
 export function GameScreen() {
   // `null` until the saved game has been read in the browser: the button stays disabled, so a
   // click can never be overwritten by the load (design D7). Every write goes through game-store's
@@ -49,7 +64,20 @@ export function GameScreen() {
     getRuntimeSnapshot,
     getServerRuntimeSnapshot,
   );
+  // The trophy case and the toast queue are a store of their own (design D12, D21).
+  const { trophies, toasts } = useSyncExternalStore(
+    subscribeTrophies,
+    getTrophiesSnapshot,
+    getServerTrophiesSnapshot,
+  );
   const loaded = state !== null;
+
+  // The evaluation that runs on load fills the case of a long-time player without a toast storm.
+  useEffect(() => {
+    if (loaded) {
+      syncTrophiesOnLoad();
+    }
+  }, [loaded]);
 
   const [crit, setCrit] = useState(0);
   const critTimer = useRef(0);
@@ -85,10 +113,19 @@ export function GameScreen() {
   }, []);
 
   const handleBuy = useCallback((item: ShopItem) => {
-    // Decor needs a free spot on the current screen, measured right before the purchase (D10).
+    // Decor and video need a free spot on the current screen, measured right before the purchase
+    // (design D10, D5); both avoid the other kind's boxes.
+    const saved = getSavedStateSnapshot();
+    const placedDecor = saved?.decor ?? [];
+    const placedVideos = saved?.videos ?? [];
     if (item.kind === "decor") {
-      const placed = getSavedStateSnapshot()?.decor ?? [];
-      buy(item.id, { decorPosition: chooseDecorPosition(item.id as DecorId, placed) });
+      buy(item.id, {
+        decorPosition: chooseDecorPosition(item.id as DecorId, placedDecor, placedVideos),
+      });
+      return;
+    }
+    if (item.kind === "video-decor") {
+      buy(item.id, { videoPosition: chooseVideoPosition(placedDecor, placedVideos) });
       return;
     }
     buy(item.id);
@@ -107,11 +144,11 @@ export function GameScreen() {
     // A golden button gets the same free spot treatment as decor, plus the click-status slot (D8).
     const place = (): DecorPosition | null => {
       const viewport = { width: window.innerWidth, height: window.innerHeight };
-      const placed = getSavedStateSnapshot()?.decor ?? [];
+      const saved = getSavedStateSnapshot();
       return placeDecor({
         viewport,
         size: GOLDEN_SIZE,
-        reserved: reservedRects(placed, viewport),
+        reserved: reservedRects(saved?.decor ?? [], viewport, saved?.videos ?? []),
         random: pageRandom,
       });
     };
@@ -119,7 +156,9 @@ export function GameScreen() {
     let last = performance.now();
     const interval = window.setInterval(() => {
       const now = performance.now();
-      const elapsed = now - last;
+      // A few missed ticks are caught up, a suspended or throttled tab is not: the game must not
+      // pay out the time it was away (add-shop-v1 "No catch-up for closed time").
+      const elapsed = Math.min(now - last, MAX_CATCH_UP_MS);
       last = now;
       tick(elapsed, now, place);
     }, HELPER_TICK_MS);
@@ -134,6 +173,7 @@ export function GameScreen() {
   return (
     <main className="relative flex flex-1 flex-col items-center justify-center gap-4 px-6">
       <div className="fixed right-4 top-4 z-20 flex items-center gap-2">
+        <AchievementsPanel state={state} trophies={trophies} />
         <LanguageToggle />
         <ThemeToggle />
       </div>
@@ -166,9 +206,11 @@ export function GameScreen() {
       </div>
       <ResetProgress onConfirm={handleReset} />
 
-      <DecorLayer decor={state?.decor ?? []} />
+      <DecorLayer decor={state?.decor ?? []} videos={state?.videos ?? []} />
+      <VideoDecorLayer videos={state?.videos ?? []} decor={state?.decor ?? []} />
       <HelperZone state={state} />
       {golden?.visible && <GoldenButton spawn={golden.visible} onCatch={catchGoldenButton} />}
+      <AchievementToast queue={toasts} />
     </main>
   );
 }

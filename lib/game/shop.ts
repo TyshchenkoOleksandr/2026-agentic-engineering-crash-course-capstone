@@ -10,6 +10,7 @@ import type {
   IsShopVisible,
   MaterialSkinId,
   PlacedDecor,
+  PlacedVideo,
   ShopItem,
   ShopItemId,
   StackSkinId,
@@ -34,6 +35,7 @@ const VIDEO_PRICES: readonly { readonly price: number; readonly revealAt: number
   { price: 30000, revealAt: 18000 },
   { price: 40000, revealAt: 24000 },
   { price: 50000, revealAt: 30000 },
+  { price: 60000, revealAt: 36000 },
 ];
 
 /**
@@ -225,8 +227,7 @@ function isOwned(state: GameState, item: ShopItem): boolean {
     case "decor":
       return state.decor.some((entry) => entry.id === item.id);
     case "video-decor":
-      // Stage 4 stub (task 0.3): implemented in task 1.7 via `state.videos`.
-      throw new Error("not implemented");
+      return state.videos.some((entry) => entry.id === item.id);
     case "click-upgrade":
       return state.upgrades.includes(item.id);
     case "feature-upgrade":
@@ -305,8 +306,19 @@ export const buyItem: BuyItem = (state, id, options) => {
         },
       };
     case "video-decor":
-      // Stage 4 stub (task 0.3): implemented in task 1.7 (adds to `videos` in catalog order).
-      throw new Error("not implemented");
+      return {
+        ok: true,
+        state: {
+          ...state,
+          balance,
+          videos: sortByCatalog([...state.videos.map((entry) => entry.id), item.id]).map(
+            (videoId) =>
+              videoId === item.id
+                ? { id: item.id, position: options?.videoPosition ?? null }
+                : (state.videos.find((entry) => entry.id === videoId) as PlacedVideo),
+          ),
+        },
+      };
     case "click-upgrade":
       return {
         ok: true,

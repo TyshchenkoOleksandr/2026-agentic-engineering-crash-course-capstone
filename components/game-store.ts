@@ -1,3 +1,10 @@
+import {
+  advanceToastQueue,
+  createToastQueue,
+  enqueueToasts,
+  evaluateAchievements,
+  getAchievementStats,
+} from "@/lib/game/achievements";
 import { getComboLevel } from "@/lib/game/combo";
 import { catchGolden, createGoldenState, tickGolden } from "@/lib/game/golden";
 import { tickHelpers } from "@/lib/game/helpers";
@@ -6,7 +13,9 @@ import { clearGame, loadGame, saveGame } from "@/lib/game/save";
 import { buyItem } from "@/lib/game/shop";
 import { toggleSkin } from "@/lib/game/skins";
 import { createInitialState } from "@/lib/game/state";
+import { createInitialTrophies, loadTrophies, saveTrophies } from "@/lib/game/trophies";
 import type {
+  AchievementId,
   BuyOptions,
   ClickRuntime,
   DecorPosition,
@@ -14,6 +23,9 @@ import type {
   PressResult,
   ShopItemId,
   SkinId,
+  ToastQueue,
+  Trophies,
+  TrophyStats,
 } from "@/lib/game/types";
 import { pageRandom } from "./page-random";
 
@@ -56,19 +68,191 @@ export function commitGame(next: GameState): void {
   emit();
 }
 
-/** Wipes the save and publishes a fresh initial state as the new snapshot. */
+/**
+ * Wipes the save and publishes a fresh initial state as the new snapshot. The trophy case is not
+ * game progress and survives: it only counts the reset and unlocks what the pre-reset state still
+ * satisfies, silently (design D12).
+ */
 export function resetGame(): void {
+  const previous = getSavedStateSnapshot();
   clearGame(window.localStorage);
   snapshot = createInitialState();
   carry = 0;
   runtime = createClickRuntime();
   clickCarry = 0;
+  toasts = createToastQueue();
+  pendingToasts = [];
   publishRuntime(0);
   emit();
+  syncTrophies({
+    state: previous ?? undefined,
+    stats: { crits: 0, goldenCaught: 0, maxComboLevel: 0, resets: readTrophies().stats.resets + 1 },
+    silent: true,
+  });
+  // The cleared toast queue is published even when the trophy case itself did not change.
+  publishTrophies();
 }
 
 // Fractional helper income in milli-clicks. It lives only here, never in the save (design D11).
 let carry = 0;
+
+// ---------------------------------------------------------------------------
+// Trophy case (unlocked achievements, lifetime counters, toast queue) — design D12, D21
+// ---------------------------------------------------------------------------
+
+/**
+ * What the achievements panel and the toast need. It is a store of its own, next to the save and
+ * the click runtime: trophies change on ticks that must not re-render the screen's runtime
+ * (the runtime snapshot stays referentially stable, design D17).
+ */
+export interface TrophiesSnapshot {
+  readonly trophies: Trophies;
+  readonly toasts: ToastQueue;
+}
+
+/** `null` until the trophy file has been read in the browser. */
+let trophies: Trophies | null = null;
+/** Runtime-only toast state; never saved (design D13). */
+let toasts: ToastQueue = createToastQueue();
+/**
+ * Unlocks found without the player doing anything (the evaluation on load, a helper tick, the
+ * reset). They never pop a toast on their own — a seeded or long-idle save would fire twenty at
+ * once (design D13) — but they are not lost either: the next action the player takes flushes them
+ * into the queue ahead of its own unlocks.
+ */
+let pendingToasts: readonly AchievementId[] = [];
+let trophiesSnapshot: TrophiesSnapshot = { trophies: createInitialTrophies(), toasts };
+const trophiesListeners = new Set<() => void>();
+
+const SERVER_TROPHIES_SNAPSHOT: TrophiesSnapshot = {
+  trophies: createInitialTrophies(),
+  toasts: createToastQueue(),
+};
+
+export function subscribeTrophies(onStoreChange: () => void): () => void {
+  trophiesListeners.add(onStoreChange);
+  return () => {
+    trophiesListeners.delete(onStoreChange);
+  };
+}
+
+/** Reads (and on first call loads) the trophy file; a corrupted file starts an empty case. */
+function readTrophies(): Trophies {
+  if (trophies === null) {
+    trophies = loadTrophies(window.localStorage).trophies;
+    trophiesSnapshot = { trophies, toasts };
+  }
+  return trophies;
+}
+
+export function getTrophiesSnapshot(): TrophiesSnapshot {
+  readTrophies();
+  return trophiesSnapshot;
+}
+
+/** SSR and the hydration render never have a trophy file; one stable object keeps React happy. */
+export function getServerTrophiesSnapshot(): TrophiesSnapshot {
+  return SERVER_TROPHIES_SNAPSHOT;
+}
+
+function publishTrophies(): void {
+  trophiesSnapshot = { trophies: readTrophies(), toasts };
+  for (const listener of trophiesListeners) {
+    listener();
+  }
+}
+
+/** Counter changes of one action: `crits` / `goldenCaught` / `resets` add up, `maxComboLevel` is a high-water mark. */
+interface CounterUpdate {
+  readonly crits?: number;
+  readonly goldenCaught?: number;
+  readonly resets?: number;
+  readonly maxComboLevel?: number;
+}
+
+interface SyncTrophiesOptions {
+  readonly counters?: CounterUpdate;
+  /** Replaces the counters outright (the reset, design D12). */
+  readonly stats?: TrophyStats;
+  /** Evaluate against this state instead of the current snapshot (the reset). */
+  readonly state?: GameState;
+  /** Unlocks are written but never enqueued as a toast (the initial load, design D13). */
+  readonly silent?: boolean;
+}
+
+function applyCounters(stats: TrophyStats, update: CounterUpdate | undefined): TrophyStats {
+  if (!update) {
+    return stats;
+  }
+  return {
+    crits: stats.crits + (update.crits ?? 0),
+    goldenCaught: stats.goldenCaught + (update.goldenCaught ?? 0),
+    maxComboLevel: Math.max(stats.maxComboLevel, update.maxComboLevel ?? 0),
+    resets: stats.resets + (update.resets ?? 0),
+  };
+}
+
+function sameTrophies(a: Trophies, b: Trophies): boolean {
+  return (
+    a.unlocked.length === b.unlocked.length &&
+    a.unlocked.every((id, index) => id === b.unlocked[index]) &&
+    a.stats.crits === b.stats.crits &&
+    a.stats.goldenCaught === b.stats.goldenCaught &&
+    a.stats.maxComboLevel === b.stats.maxComboLevel &&
+    a.stats.resets === b.stats.resets
+  );
+}
+
+/**
+ * Applies the counter changes of one action, re-evaluates every achievement against the current
+ * game state and persists the result. Writes only the trophy file, never the game save (D12), and
+ * publishes only when something actually changed, so a quiet tick costs no re-render.
+ */
+function syncTrophies({ counters, stats, state, silent = false }: SyncTrophiesOptions = {}): void {
+  const current = state ?? getSavedStateSnapshot();
+  if (!current) {
+    return;
+  }
+  const previous = readTrophies();
+  const nextStats = stats ?? applyCounters(previous.stats, counters);
+  const evaluation = evaluateAchievements(
+    previous.unlocked,
+    getAchievementStats(current, { unlocked: previous.unlocked, stats: nextStats }),
+  );
+  const next: Trophies = { unlocked: evaluation.unlocked, stats: nextStats };
+
+  const changed = !sameTrophies(previous, next);
+  if (changed) {
+    trophies = next;
+    saveTrophies(window.localStorage, next);
+  }
+
+  let queued = toasts;
+  if (silent) {
+    pendingToasts =
+      evaluation.newlyUnlocked.length === 0
+        ? pendingToasts
+        : [...pendingToasts, ...evaluation.newlyUnlocked];
+  } else {
+    const announce = [...pendingToasts, ...evaluation.newlyUnlocked];
+    pendingToasts = [];
+    queued = announce.length === 0 ? toasts : enqueueToasts(toasts, announce);
+  }
+  const toastsChanged = queued !== toasts;
+  toasts = queued;
+
+  if (changed || toastsChanged) {
+    publishTrophies();
+  }
+}
+
+/**
+ * First evaluation after the save and the trophy file are loaded: it fills the trophy case of a
+ * long-time player without firing a toast storm (design D13). Called once from the screen.
+ */
+export function syncTrophiesOnLoad(): void {
+  syncTrophies({ silent: true });
+}
 
 // ---------------------------------------------------------------------------
 // Click runtime (combo, golden button, main-click carry) — never saved (design D2, D17)
@@ -131,6 +315,12 @@ export function press(nowMs: number): PressResult | null {
   clickCarry = result.carry;
   publishRuntime(nowMs);
   commitGame(result.state);
+  syncTrophies({
+    counters: {
+      crits: result.crit ? 1 : 0,
+      maxComboLevel: getComboLevel(result.runtime.combo, nowMs),
+    },
+  });
   return result;
 }
 
@@ -145,6 +335,8 @@ export function catchGoldenButton(): void {
   }
   runtime = { ...runtime, golden };
   publishRuntime(runtimeSnapshot.now);
+  // Trophy write only: catching still never touches the game save (design D12).
+  syncTrophies({ counters: { goldenCaught: 1 } });
 }
 
 /** Buys one unit of `id`; a refused purchase leaves the state (and the save) untouched. */
@@ -161,6 +353,7 @@ export function buy(id: ShopItemId, options?: BuyOptions): void {
       publishRuntime(runtimeSnapshot.now);
     }
     commitGame(result.state);
+    syncTrophies();
   }
 }
 
@@ -173,6 +366,7 @@ export function toggle(id: SkinId): void {
   const next = toggleSkin(state, id);
   if (next !== state) {
     commitGame(next);
+    syncTrophies();
   }
 }
 
@@ -232,4 +426,13 @@ export function tick(
   if (result.state !== state) {
     commitGame(result.state);
   }
+
+  // The toast queue runs on the same 100 ms tick as everything else (design D13).
+  const advanced = advanceToastQueue(toasts, elapsedMs);
+  if (advanced !== toasts) {
+    toasts = advanced;
+    publishTrophies();
+  }
+  // Helper income is not an action of the player: what it unlocks waits for the next click.
+  syncTrophies({ silent: true });
 }

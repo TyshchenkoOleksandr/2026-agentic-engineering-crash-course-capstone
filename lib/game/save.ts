@@ -13,10 +13,13 @@ import type {
   LeveledUpgradeId,
   LeveledUpgradeItem,
   PlacedDecor,
+  PlacedVideo,
   SkinId,
   SkinItem,
   StackSkinId,
   UpgradeId,
+  VideoDecorId,
+  VideoDecorItem,
   KeyValueStorage,
   LoadGame,
   LoadStatus,
@@ -80,9 +83,25 @@ export const migrateV2ToV3: MigrateV2ToV3 = (state) => {
 };
 
 /** Built-in MIGRATIONS[3]: v3 payload -> v4 payload (adds `videos: []`, nothing else; design D11). */
-export const migrateV3ToV4: MigrateV3ToV4 = () => {
-  // Stage 4 stub (task 0.3): implemented in task 1.8.
-  throw new Error("not implemented");
+export const migrateV3ToV4: MigrateV3ToV4 = (state) => {
+  if (!isRecord(state)) {
+    return state;
+  }
+  const v3 = state;
+  // Values are copied as they are; validateGameState decides whether they are acceptable.
+  return {
+    balance: v3.balance,
+    totalClicks: v3.totalClicks,
+    ownedSkins: v3.ownedSkins,
+    enabledSkins: v3.enabledSkins,
+    material: v3.material,
+    decor: v3.decor,
+    // Stage 3 knew no videos; a stray `videos` key of a hand-edited save is dropped.
+    videos: [],
+    upgrades: v3.upgrades,
+    helpers: v3.helpers,
+    levels: v3.levels,
+  };
 };
 
 /** Built-in migration table, keyed by source version. */
@@ -93,10 +112,30 @@ export const MIGRATIONS: MigrationTable = Object.freeze({
 });
 
 /** v4 envelope writer: exactly the ten schema keys, no runtime values (design D2, D11). */
-export const serializeGame: SerializeGame = () => {
-  // Stage 4 stub (task 0.3): implemented in task 1.8 (the ten v4 keys incl. `videos`).
-  throw new Error("not implemented");
-};
+export const serializeGame: SerializeGame = (state) =>
+  JSON.stringify({
+    version: CURRENT_SAVE_VERSION,
+    state: {
+      balance: state.balance,
+      totalClicks: state.totalClicks,
+      ownedSkins: state.ownedSkins,
+      enabledSkins: state.enabledSkins,
+      material: state.material,
+      decor: state.decor.map(pickPlaced),
+      videos: state.videos.map(pickPlaced),
+      upgrades: state.upgrades,
+      helpers: pickHelpers(state.helpers),
+      levels: pickLevels(state.levels),
+    },
+  });
+
+/** One placed decor / video entry with exactly `id` and `position` (extra keys dropped). */
+function pickPlaced<T extends PlacedDecor | PlacedVideo>(entry: T): T {
+  return {
+    id: entry.id,
+    position: entry.position === null ? null : { x: entry.position.x, y: entry.position.y },
+  } as T;
+}
 
 // Known ids in catalog order: the validator both checks against them and sorts by them (D13).
 const SKIN_IDS: readonly SkinId[] = SHOP_CATALOG.filter(
@@ -119,6 +158,9 @@ const HELPER_IDS: readonly HelperId[] = SHOP_CATALOG.filter(
 const LEVELED_ITEMS: readonly LeveledUpgradeItem[] = SHOP_CATALOG.filter(
   (item): item is LeveledUpgradeItem => item.kind === "leveled-upgrade",
 );
+const VIDEO_IDS: readonly VideoDecorId[] = SHOP_CATALOG.filter(
+  (item): item is VideoDecorItem => item.kind === "video-decor",
+).map((item) => item.id);
 
 function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
@@ -170,24 +212,32 @@ function normalizePosition(value: unknown): DecorPosition | null | undefined {
   return inRange(x) && inRange(y) ? { x, y } : undefined;
 }
 
-/** Decor entries: known ids, no duplicates, valid positions, catalog order, extra keys dropped. */
-function normalizeDecor(value: unknown): PlacedDecor[] | null {
+/**
+ * Decor and video entries: known ids, no duplicates, valid positions, catalog order, extra keys
+ * dropped (design D11: videos follow the decor rules exactly).
+ */
+function normalizePlaced<T extends string>(
+  value: unknown,
+  known: readonly T[],
+): { id: T; position: DecorPosition | null }[] | null {
   if (!Array.isArray(value)) {
     return null;
   }
-  const entries = new Map<DecorId, PlacedDecor>();
+  const entries = new Map<T, { id: T; position: DecorPosition | null }>();
   for (const raw of value as unknown[]) {
     if (!isRecord(raw)) {
       return null;
     }
-    const id = raw.id as DecorId;
+    const id = raw.id as T;
     const position = normalizePosition(raw.position);
-    if (!DECOR_IDS.includes(id) || entries.has(id) || position === undefined) {
+    if (!known.includes(id) || entries.has(id) || position === undefined) {
       return null;
     }
     entries.set(id, { id, position });
   }
-  return DECOR_IDS.filter((id) => entries.has(id)).map((id) => entries.get(id) as PlacedDecor);
+  return known
+    .filter((id) => entries.has(id))
+    .map((id) => entries.get(id) as { id: T; position: DecorPosition | null });
 }
 
 /** Exactly the three helper counts, each a non-negative safe integer (design D15). */
@@ -222,10 +272,61 @@ function normalizeLevels(
 }
 
 /** v4 validator with normalization (design D11, D15). */
-export const validateGameState: ValidateGameState = () => {
-  // Stage 4 stub (task 0.3): implemented in task 1.8, including the `videos` rules and the
-  // dropping of a stray `achievements` / `stats` key.
-  throw new Error("not implemented");
+export const validateGameState: ValidateGameState = (value) => {
+  if (!isRecord(value) || !isCount(value.balance) || !isCount(value.totalClicks)) {
+    return null;
+  }
+
+  const ownedSkins = normalizeIds(value.ownedSkins, SKIN_IDS);
+  const enabledSkins = normalizeIds(value.enabledSkins, STACK_SKIN_IDS);
+  const decor = normalizePlaced(value.decor, DECOR_IDS);
+  const videos = normalizePlaced(value.videos, VIDEO_IDS);
+  const upgrades = normalizeIds(value.upgrades, UPGRADE_IDS);
+  if (
+    ownedSkins === null ||
+    enabledSkins === null ||
+    decor === null ||
+    videos === null ||
+    upgrades === null
+  ) {
+    return null;
+  }
+  if (!enabledSkins.every((id) => ownedSkins.includes(id))) {
+    return null;
+  }
+
+  const material = value.material;
+  const materialOwned = material === "classic" || ownedSkins.includes(material as SkinId);
+  if ((material !== "classic" && material !== "gold") || !materialOwned) {
+    return null;
+  }
+
+  if (upgrades.includes("triple-click") && !upgrades.includes("double-click")) {
+    return null;
+  }
+
+  const helpers = normalizeHelpers(value.helpers);
+  if (helpers === null) {
+    return null;
+  }
+  const levels = normalizeLevels(value.levels, helpers);
+  if (levels === null) {
+    return null;
+  }
+
+  // Exactly the ten schema keys: a stray `achievements` / `stats` key is dropped (design D12).
+  return {
+    balance: value.balance,
+    totalClicks: value.totalClicks,
+    ownedSkins,
+    enabledSkins,
+    material,
+    decor,
+    videos,
+    upgrades,
+    helpers,
+    levels,
+  };
 };
 
 export const migrateSave: MigrateSave = (file, migrations, targetVersion) => {

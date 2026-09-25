@@ -184,7 +184,7 @@ export function MainButton({
               data-testid="floating-number"
               aria-hidden="true"
               style={{ left: item.x, top: item.y }}
-              className="floating-number pointer-events-none fixed z-30 text-xl font-bold text-accent"
+              className="floating-number pointer-events-none fixed text-xl font-bold"
             >
               +{item.value}
             </span>

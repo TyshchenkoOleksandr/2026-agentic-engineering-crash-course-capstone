@@ -11,6 +11,18 @@
   --accent: #db2777;
   --accent-foreground: #ffffff;
   --muted: #71717a;
+  /* Soft shadow skin (design D16): a dark drop shadow reads on the light page. */
+  --skin-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.45);
+  --skin-shadow-hover: 0 18px 35px -8px rgb(0 0 0 / 0.55);
+  --skin-shadow-active: 0 4px 10px -4px rgb(0 0 0 / 0.65);
+  /* Floating +N pill (design D17): opaque background, text at contrast >= 4.5 on it. */
+  --fx-float-bg: rgb(23 23 23 / 0.92);
+  --fx-float-fg: #ffffff;
+  --achievement-done-bg: #dcfce7;
+  --achievement-done-fg: #14532d;
+  --achievement-done-border: #16a34a;
+  --achievement-locked-bg: rgb(23 23 23 / 0.04);
+  --achievement-locked-border: rgb(23 23 23 / 0.12);
   color-scheme: light;
 }
 
@@ -20,6 +32,17 @@
   --accent: #f472b6;
   --accent-foreground: #1f0713;
   --muted: #a1a1aa;
+  /* A black shadow is invisible on a #0a0a0a page, so dark mode glows instead (design D16). */
+  --skin-shadow: 0 0 0 1px rgb(255 255 255 / 0.12), 0 10px 30px -4px rgb(244 114 182 / 0.55);
+  --skin-shadow-hover: 0 0 0 1px rgb(255 255 255 / 0.18), 0 18px 40px -6px rgb(244 114 182 / 0.75);
+  --skin-shadow-active: 0 0 0 1px rgb(255 255 255 / 0.22), 0 4px 14px -4px rgb(244 114 182 / 0.85);
+  --fx-float-bg: rgb(237 237 237 / 0.94);
+  --fx-float-fg: #0a0a0a;
+  --achievement-done-bg: #052e16;
+  --achievement-done-fg: #bbf7d0;
+  --achievement-done-border: #22c55e;
+  --achievement-locked-bg: rgb(237 237 237 / 0.05);
+  --achievement-locked-border: rgb(237 237 237 / 0.14);
   color-scheme: dark;
 }
 
@@ -39,11 +62,11 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
 
-/* Motion (design D11): only transform / opacity are animated. */
+/* Motion (design D11): only transform / opacity are animated. The box-shadow is deliberately not
+   transitioned — the Soft shadow skin is applied at hydration, and a 150 ms fade would make the
+   computed shadow unreadable (and unmeasurable) right after load. */
 .main-button {
-  transition:
-    transform 150ms ease-out,
-    box-shadow 150ms ease-out;
+  transition: transform 150ms ease-out;
 }
 
 .main-button:active:not(:disabled) {
@@ -71,16 +94,17 @@ body {
    Every animation touches only transform / opacity.
    --------------------------------------------------------------------------- */
 
+/* Reads the per-theme tokens only, so the shadow is measurable in both themes (design D16). */
 .skin-soft-shadow {
-  box-shadow: 0 10px 25px -5px rgb(0 0 0 / 0.45);
+  box-shadow: var(--skin-shadow);
 }
 
 .skin-soft-shadow:hover:not(:disabled) {
-  box-shadow: 0 18px 35px -8px rgb(0 0 0 / 0.55);
+  box-shadow: var(--skin-shadow-hover);
 }
 
 .skin-soft-shadow:active:not(:disabled) {
-  box-shadow: 0 4px 10px -4px rgb(0 0 0 / 0.65);
+  box-shadow: var(--skin-shadow-active);
 }
 
 .main-button[data-material="gold"] {
@@ -136,7 +160,15 @@ body {
   }
 }
 
+/* A pill, not bare accent-coloured text: the +N used to be exactly the colour of the button it
+   spawns over (design D17). `z-index: 60` puts it above the golden button (40) and the
+   switchers (20); it stays portalled to <body> and never takes pointer events. */
 .floating-number {
+  z-index: 60;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background-color: var(--fx-float-bg);
+  color: var(--fx-float-fg);
   animation: float-up 800ms ease-out forwards;
 }
 
@@ -165,45 +197,23 @@ body {
   display: block;
 }
 
+/* The sleeping cat is one inline SVG (design D15). The keyframes below are unchanged; they run on
+   SVG nodes thanks to `transform-box: fill-box`, which makes `transform-origin` relative to the
+   part's own bounding box instead of the SVG viewport. */
 .cat-body {
-  left: 8px;
-  bottom: 8px;
-  width: 88px;
-  height: 44px;
-  border-radius: 44px 44px 40px 40px;
-  background: #9ca3af;
-  animation: cat-breathe 4s ease-in-out infinite;
+  transform-box: fill-box;
   transform-origin: bottom center;
-}
-
-.cat-head {
-  left: 74px;
-  bottom: 30px;
-  width: 38px;
-  height: 34px;
-  border-radius: 50%;
-  background: #9ca3af;
+  animation: cat-breathe 4s ease-in-out infinite;
 }
 
 .cat-ear {
-  left: 96px;
-  bottom: 58px;
-  width: 0;
-  height: 0;
-  border-left: 9px solid transparent;
-  border-right: 9px solid transparent;
-  border-bottom: 14px solid #9ca3af;
+  transform-box: fill-box;
   transform-origin: bottom center;
   animation: cat-ear-twitch 7s ease-in-out infinite;
 }
 
 .cat-tail {
-  left: 0;
-  bottom: 10px;
-  width: 30px;
-  height: 12px;
-  border-radius: 12px;
-  background: #9ca3af;
+  transform-box: fill-box;
   transform-origin: right center;
   animation: cat-tail-sway 6s ease-in-out infinite;
 }
@@ -232,13 +242,15 @@ body {
   }
 }
 
+/* The sway is gentle on purpose: the tail swings around its right end, and a wider angle would
+   push its tip outside the 120 × 80 decor box (design D15). */
 @keyframes cat-tail-sway {
   0%,
   100% {
     transform: rotate(0deg);
   }
   50% {
-    transform: rotate(-12deg);
+    transform: rotate(-8deg);
   }
 }
 
@@ -503,6 +515,31 @@ body {
   animation: factory-press 400ms ease-in-out infinite;
 }
 
+/* ---------------------------------------------------------------------------
+   Stage 4: achievement toast and video decor (design D7, D13).
+   --------------------------------------------------------------------------- */
+
+@keyframes toast-in {
+  0% {
+    transform: translate(-50%, 12px);
+    opacity: 0;
+  }
+  100% {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+.achievement-toast {
+  animation: toast-in 200ms ease-out;
+}
+
+/* Own art under every embed: a dark rounded card that also carries the offline message. */
+.video-placeholder {
+  background-image: linear-gradient(160deg, rgb(24 24 27 / 0.9), rgb(63 63 70 / 0.9));
+  color: #fafafa;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .main-button {
     transition-duration: 0s;
@@ -528,7 +565,10 @@ body {
   .crit-text,
   .crit-flash,
   .golden-button,
-  .golden-button * {
+  .golden-button *,
+  .achievement-toast,
+  .video-decor,
+  .video-decor * {
     animation: none;
   }
 
@@ -563,11 +603,80 @@ body {
 [data-motion="reduced"] .crit-text,
 [data-motion="reduced"] .crit-flash,
 [data-motion="reduced"] .golden-button,
-[data-motion="reduced"] .golden-button * {
+[data-motion="reduced"] .golden-button *,
+[data-motion="reduced"] .achievement-toast,
+[data-motion="reduced"] .video-decor,
+[data-motion="reduced"] .video-decor * {
   animation: none;
 }
 
 /* Reduced motion still shows the crit, just static: the flash stays visible for its 900 ms. */
 [data-motion="reduced"] .crit-flash {
   opacity: 0.5;
+}
+
+.achievement-close {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--achievement-locked-border);
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.achievement-close:hover {
+  background: var(--achievement-locked-bg);
+}
+
+.achievement-row {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  border-radius: 0.75rem;
+  border: 1px solid var(--achievement-locked-border);
+  background: var(--achievement-locked-bg);
+  padding: 0.75rem;
+}
+
+.achievement-row[data-unlocked="true"] {
+  border-color: var(--achievement-done-border);
+  background: var(--achievement-done-bg);
+  color: var(--achievement-done-fg);
+}
+
+.achievement-row[data-unlocked="true"] .text-muted {
+  color: color-mix(in srgb, var(--achievement-done-fg) 78%, transparent);
+}
+
+.achievement-icon {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.6rem;
+  background: color-mix(in srgb, var(--foreground) 6%, transparent);
+}
+
+.achievement-row[data-unlocked="true"] .achievement-icon {
+  background: color-mix(in srgb, var(--achievement-done-border) 22%, var(--achievement-done-bg));
+  color: var(--achievement-done-fg);
+}
+
+.achievement-check {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  display: grid;
+  place-items: center;
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 999px;
+  background: var(--achievement-done-border);
+  color: #ffffff;
 }

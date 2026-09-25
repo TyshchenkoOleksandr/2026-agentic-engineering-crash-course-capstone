@@ -25,13 +25,13 @@ interface ShopBoxProps {
   readonly onToggle: (id: SkinId) => void;
 }
 
-const CATEGORIES: readonly ShopCategory[] = ["skins", "decor", "upgrades"];
+/** Display order; "video" is the Stage 4 category and is always rendered last (design D4). */
+const CATEGORIES: readonly ShopCategory[] = ["skins", "decor", "upgrades", "video"];
 
 const CATEGORY_LABELS: Record<ShopCategory, TranslationKey> = {
   skins: "shop.category.skins",
   decor: "shop.category.decor",
   upgrades: "shop.category.upgrades",
-  // Stage 4 (design D4): the heading itself is rendered by task 3.6, this keeps the map total.
   video: "shop.category.video",
 };
 

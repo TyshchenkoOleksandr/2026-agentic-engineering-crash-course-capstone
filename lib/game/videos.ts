@@ -9,11 +9,8 @@ import type {
 /** Privacy-friendly embed host; the only provider of Stage 4 (design D6). */
 export const VIDEO_EMBED_HOST = "https://www.youtube-nocookie.com";
 
-/** 16:9 box every video decor is rendered and placed with (design D5). */
-export const VIDEO_SIZE: Size = Object.freeze({ width: 192, height: 108 });
-
-/** At most this many iframes exist at any time; the rest stay on their placeholder (design D5). */
-export const MAX_ACTIVE_VIDEOS = 3;
+/** 16:9 box every video decor is rendered and placed with. */
+export const VIDEO_SIZE: Size = Object.freeze({ width: 384, height: 216 });
 
 /** A frame that does not fire `load` within this many ms falls back to `offline` (design D7). */
 export const VIDEO_LOAD_TIMEOUT_MS = 5000;
@@ -24,26 +21,46 @@ export const VIDEO_LOAD_TIMEOUT_MS = 5000;
  * this array.
  */
 export const VIDEO_DECOR: readonly VideoEntry[] = Object.freeze([
-  { id: "video-runner", provider: "youtube-nocookie", videoId: "PLACEHLDR01" },
-  { id: "video-parkour", provider: "youtube-nocookie", videoId: "PLACEHLDR02" },
-  { id: "video-soap", provider: "youtube-nocookie", videoId: "PLACEHLDR03" },
-  { id: "video-kinetic-sand", provider: "youtube-nocookie", videoId: "PLACEHLDR04" },
-  { id: "video-slime", provider: "youtube-nocookie", videoId: "PLACEHLDR05" },
-  { id: "video-hydraulic", provider: "youtube-nocookie", videoId: "PLACEHLDR06" },
-  { id: "video-marble", provider: "youtube-nocookie", videoId: "PLACEHLDR07" },
-  { id: "video-aquarium", provider: "youtube-nocookie", videoId: "PLACEHLDR08" },
-  { id: "video-fireplace", provider: "youtube-nocookie", videoId: "PLACEHLDR09" },
-  { id: "video-rain", provider: "youtube-nocookie", videoId: "PLACEHLDR10" },
+  { id: "video-runner", provider: "youtube-nocookie", videoId: "vTfD20dbxho" },
+  { id: "video-parkour", provider: "youtube-nocookie", videoId: "VahKXgW2nXc" },
+  { id: "video-soap", provider: "youtube-nocookie", videoId: "ZnC9zqn9rBY" },
+  { id: "video-kinetic-sand", provider: "youtube-nocookie", videoId: "f1-2xRx2gnE" },
+  { id: "video-slime", provider: "youtube-nocookie", videoId: "-MJi7T4lX80" },
+  { id: "video-hydraulic", provider: "youtube-nocookie", videoId: "AKeUssuu3Is" },
+  { id: "video-marble", provider: "youtube-nocookie", videoId: "1cmsiBKoLtE" },
+  { id: "video-aquarium", provider: "youtube-nocookie", videoId: "uJaqnJ6-xfY" },
+  { id: "video-fireplace", provider: "youtube-nocookie", videoId: "1MGlTgSnsE4" },
+  { id: "video-rain", provider: "youtube-nocookie", videoId: "n_Dv4JMiwK8" },
+  { id: "video-seal", provider: "youtube-nocookie", videoId: "h9uFQv3t1AU" },
 ] as const satisfies readonly VideoEntry[]);
 
-export const getVideoEntry: GetVideoEntry = () => {
-  throw new Error("not implemented");
+export const getVideoEntry: GetVideoEntry = (id) => {
+  const entry = VIDEO_DECOR.find((candidate) => candidate.id === id);
+  if (!entry) {
+    throw new Error(`Unknown video decor id: ${id}`);
+  }
+  return entry;
 };
 
-export const buildEmbedUrl: BuildEmbedUrl = () => {
-  throw new Error("not implemented");
+export const buildEmbedUrl: BuildEmbedUrl = (entry) => {
+  const params = [
+    "autoplay=1",
+    "mute=1",
+    "loop=1",
+    `playlist=${entry.videoId}`,
+    "controls=0",
+    "modestbranding=1",
+    "playsinline=1",
+    "rel=0",
+    "disablekb=1",
+    "iv_load_policy=3",
+  ];
+  const { startSeconds } = entry;
+  if (typeof startSeconds === "number" && Number.isInteger(startSeconds) && startSeconds > 0) {
+    params.push(`start=${startSeconds}`);
+  }
+  return `${VIDEO_EMBED_HOST}/embed/${entry.videoId}?${params.join("&")}`;
 };
 
-export const getActiveVideos: GetActiveVideos = () => {
-  throw new Error("not implemented");
-};
+export const getActiveVideos: GetActiveVideos = (placed) =>
+  placed.filter((video) => video.position !== null);
