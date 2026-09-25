@@ -136,3 +136,8 @@ timeout that unmounts the frame).
 
 - [x] 6.1 [human] Red commit `test(add-content-v3): revise the video catalog, frame size and non-overlap` after the spec update. The overlap tests fail with `not implemented`. — `c862b01`. The post-commit loop exited before a check; `.agent-log/loops/2026-09-25T14-42-19-432Z-add-content-v3.jsonl` has only the start line and pid 48043 is gone.
 - [x] 6.2 Implement `separatePlacedVideos` and use it for rendering and the next purchase. Do not edit the tests from 6.1.
+
+## 7. Catalog swap confirmed 2026-09-25 (design D24)
+
+- [ ] 7.1 [human] Red commit `test(add-content-v3): swap three videos for Expedition clips` after the spec update. Catalog tests fail until `VIDEO_DECOR` and prices match D24.
+- [ ] 7.2 Replace Best clips, NFL highlights, and Fireplace with `video-music` (`wTRRKguilmY`, 2500 / 1500), `video-trailer` (`2VaLOc1FpSo`, 25000 / 15000), and `video-combat` (`nLdRv_N3y00`, 30000 / 18000). Drop the three old ids. Do not edit the tests from 7.1.

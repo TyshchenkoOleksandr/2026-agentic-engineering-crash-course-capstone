@@ -348,3 +348,12 @@ New test in `e2e/add-content-v3.spec.ts`.
 - **THEN** `[data-testid="shop-item-video-soap"]` contains the texts `Різання мила` and `Гіпнотичні нарізки мила`
 - **WHEN** the user clicks `[data-testid="lang-toggle"]`
 - **THEN** it contains `Soap cutting` and `Hypnotic soap-cutting loops` and `[data-testid="shop-category-video"]` has text `Video`
+
+## MODIFIED Requirements
+
+### Requirement: Expedition videos replace three shop rows
+Supersedes the D23 video rows for `video-marble`, `video-aquarium`, and `video-fireplace` (design D24). The video category SHALL list, in order, `video-music` (price 2500, revealAt 1500), then `video-runner` through `video-hydraulic` at their D23 prices, then `video-trailer` (25000 / 15000), `video-combat` (30000 / 18000), `video-rain` (50000 / 30000), `video-seal` (60000 / 36000). Catalog length stays 30.
+
+#### Scenario: Music reveals before Subway Surfers [unit]
+- **WHEN** revealed video ids are read at 1499, 1500, and 3000 clicks
+- **THEN** they are `[]`, `["video-music"]`, and `["video-music", "video-runner"]`

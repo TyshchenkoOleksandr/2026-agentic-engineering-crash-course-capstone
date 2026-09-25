@@ -546,6 +546,21 @@ The human replaced the placeholder catalog, dropped the three-frame cap, enlarge
 - `separatePlacedVideos(videos, viewport)` returns a new list. The first placed video keeps its position. Each later placed video is shifted, in 8 px steps, until its `VIDEO_SIZE` box does not strictly overlap an earlier placed box or the viewport edge. A `null` position stays `null`. The input is not mutated. Rendering and the next purchase both use this list, so a buy cannot land on a box that was only moved on screen.
 - The achievements dialog closes from a cross button (`data-testid="achievements-close"`, accessible name still `achievements.close`). An unlocked row is green (`data-unlocked="true"`) and shows a check. Each achievement has its own icon.
 
+## D24. Catalog swap confirmed 2026-09-25
+
+The human removed Best clips, NFL highlights, and Fireplace (NFL blocks the embed; the other two sat on top of a playing frame) and added three Clair Obscur videos. Count stays 11. `videos-all` stays 11.
+
+| Order | Id | videoId | Price | Appears at | uk | en |
+|---|---|---|---|---|---|---|
+| 1 | `video-music` | `wTRRKguilmY` | 2 500 | 1 500 | Музика Експедиції | Expedition music |
+| 2–7 | `video-runner` … `video-hydraulic` | unchanged | unchanged | unchanged | unchanged | unchanged |
+| 8 | `video-trailer` | `2VaLOc1FpSo` | 25 000 | 15 000 | Трейлер Експедиції 33 | Expedition 33 trailer |
+| 9 | `video-combat` | `nLdRv_N3y00` | 30 000 | 18 000 | Бій Експедиції 33 | Expedition 33 combat |
+| 10 | `video-rain` | `n_Dv4JMiwK8` | 50 000 | 30 000 | unchanged | unchanged |
+| 11 | `video-seal` | `h9uFQv3t1AU` | 60 000 | 36 000 | unchanged | unchanged |
+
+`video-music` is the cheapest video. Descriptions: «Тиха музика табору» / «Quiet camp music»; «Трейлер запуску гри» / «The game's launch trailer»; «Посібник з бою для новачків» / «A beginner's combat guide». `video-marble`, `video-aquarium`, and `video-fireplace` leave the catalog and the id union. A save that still names them drops those entries on load.
+
 ## Migration Plan
 
 `MIGRATIONS = { 1: migrateV1ToV2, 2: migrateV2ToV3, 3: migrateV3ToV4 }`,

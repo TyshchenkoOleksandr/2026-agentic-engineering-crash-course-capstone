@@ -234,3 +234,19 @@ no-break space U+00A0 (`5 %`, DECISION (confirmed)); English writes `5%`. `{pric
 #### Scenario: Decimal formatting for the combo meter [unit]
 - **WHEN** `formatNumber(1.5, "uk")`, `formatNumber(1.9, "uk")`, `formatNumber(1.5, "en")`, `formatNumber(2, "uk")` are called
 - **THEN** the results are `"1,5"`, `"1,9"`, `"1.5"`, `"2"`
+
+## MODIFIED Requirements
+
+### Requirement: Three video names change
+Rows 82–87 of the Stage 4 copy table are replaced (design D24). Key count stays 162.
+
+| Key | uk | en |
+|---|---|---|
+| `item.video-music.name` | Музика Експедиції | Expedition music |
+| `item.video-music.description` | Тиха музика табору | Quiet camp music |
+| `item.video-trailer.name` | Трейлер Експедиції 33 | Expedition 33 trailer |
+| `item.video-trailer.description` | Трейлер запуску гри | The game's launch trailer |
+| `item.video-combat.name` | Бій Експедиції 33 | Expedition 33 combat |
+| `item.video-combat.description` | Посібник з бою для новачків | A beginner's combat guide |
+
+`item.video-marble.*`, `item.video-aquarium.*`, and `item.video-fireplace.*` are removed. Item ids in catalog order put `video-music` first among videos, then the six unchanged videos, then `video-trailer`, `video-combat`, `video-rain`, `video-seal`.

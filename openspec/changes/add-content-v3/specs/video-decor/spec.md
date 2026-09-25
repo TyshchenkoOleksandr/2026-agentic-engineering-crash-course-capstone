@@ -194,3 +194,13 @@ Supersedes the ten-item placeholder catalog, `VIDEO_SIZE` 192×108, and `MAX_ACT
 - **GIVEN** viewport `{ width: 1280, height: 720 }` and videos `video-runner` and `video-parkour` both at `{ x: 0.1, y: 0.1 }`
 - **WHEN** `separatePlacedVideos` runs
 - **THEN** the first position is unchanged, the two `VIDEO_SIZE` boxes do not strictly overlap, and the input array is unchanged
+
+## MODIFIED Requirements
+
+### Requirement: Expedition catalog replaces three videos
+Supersedes the D23 id list (design D24, confirmed 2026-09-25). `VIDEO_DECOR` SHALL be eleven entries in this order: `video-music` (`wTRRKguilmY`), `video-runner`, `video-parkour`, `video-soap`, `video-kinetic-sand`, `video-slime`, `video-hydraulic`, `video-trailer` (`2VaLOc1FpSo`), `video-combat` (`nLdRv_N3y00`), `video-rain`, `video-seal`. `video-music` SHALL cost 2 500 and reveal at 1 500. `video-trailer` SHALL cost 25 000 and reveal at 15 000. `video-combat` SHALL cost 30 000 and reveal at 18 000. The other eight prices stay as in D23. `video-marble`, `video-aquarium`, and `video-fireplace` SHALL NOT be catalog ids. `videos-all` threshold stays 11.
+
+#### Scenario: Music is first and cheapest [unit]
+- **THEN** `VIDEO_DECOR[0]` is `{ id: "video-music", provider: "youtube-nocookie", videoId: "wTRRKguilmY" }`
+- **AND** `VIDEO_DECOR` ids equal `["video-music", "video-runner", "video-parkour", "video-soap", "video-kinetic-sand", "video-slime", "video-hydraulic", "video-trailer", "video-combat", "video-rain", "video-seal"]`
+- **AND** the shop price of `video-music` is 2500 and its `revealAt` is 1500, lower than every other video

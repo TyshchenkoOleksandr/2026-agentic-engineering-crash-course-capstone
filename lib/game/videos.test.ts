@@ -15,29 +15,29 @@ import type { PlacedVideo, VideoDecorId, VideoEntry } from "./types";
 // ---------------------------------------------------------------------------
 
 const CATALOG_IDS: readonly VideoDecorId[] = [
+  "video-music",
   "video-runner",
   "video-parkour",
   "video-soap",
   "video-kinetic-sand",
   "video-slime",
   "video-hydraulic",
-  "video-marble",
-  "video-aquarium",
-  "video-fireplace",
+  "video-trailer",
+  "video-combat",
   "video-rain",
   "video-seal",
 ];
 
 const EXPECTED_IDS = [
+  "wTRRKguilmY",
   "vTfD20dbxho",
   "VahKXgW2nXc",
   "ZnC9zqn9rBY",
   "f1-2xRx2gnE",
   "-MJi7T4lX80",
   "AKeUssuu3Is",
-  "1cmsiBKoLtE",
-  "uJaqnJ6-xfY",
-  "1MGlTgSnsE4",
+  "2VaLOc1FpSo",
+  "nLdRv_N3y00",
   "n_Dv4JMiwK8",
   "h9uFQv3t1AU",
 ] as const;

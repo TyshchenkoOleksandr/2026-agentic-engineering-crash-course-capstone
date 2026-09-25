@@ -94,12 +94,12 @@ const COPY: ReadonlyArray<readonly [TranslationKey, string, string]> = [
   ["item.video-slime.description", "Спокійна медитація", "A quiet meditation"], // 79
   ["item.video-hydraulic.name", "Краєвиди природи", "Nature views"], // 80
   ["item.video-hydraulic.description", "Довгі краєвиди природи", "Long views of nature"], // 81
-  ["item.video-marble.name", "Найкращі кліпи", "Best clips"], // 82
-  ["item.video-marble.description", "Добірка найкращих кліпів", "A reel of the best clips"], // 83
-  ["item.video-aquarium.name", "Моменти NFL", "NFL highlights"], // 84
-  ["item.video-aquarium.description", "Яскраві моменти матчів", "Bright match moments"], // 85
-  ["item.video-fireplace.name", "Камін", "Fireplace"], // 86
-  ["item.video-fireplace.description", "Дрова тріщать у вогні", "Logs crackling in the fire"], // 87
+  ["item.video-music.name", "Музика Експедиції", "Expedition music"], // 82
+  ["item.video-music.description", "Тиха музика табору", "Quiet camp music"], // 83
+  ["item.video-trailer.name", "Трейлер Експедиції 33", "Expedition 33 trailer"], // 84
+  ["item.video-trailer.description", "Трейлер запуску гри", "The game's launch trailer"], // 85
+  ["item.video-combat.name", "Бій Експедиції 33", "Expedition 33 combat"], // 86
+  ["item.video-combat.description", "Посібник з бою для новачків", "A beginner's combat guide"], // 87
   ["item.video-rain.name", "Паркур у Minecraft", "Minecraft parkour"], // 88
   ["item.video-rain.description", "Стрибки по блоках у Minecraft", "Block-hopping in Minecraft"], // 89
   ["item.video-seal.name", "Тюлень, що крутиться", "Spinning seal"],
@@ -210,15 +210,15 @@ const ITEM_IDS = [
   "speed-robot",
   "factory",
   "speed-factory",
+  "video-music",
   "video-runner",
   "video-parkour",
   "video-soap",
   "video-kinetic-sand",
   "video-slime",
   "video-hydraulic",
-  "video-marble",
-  "video-aquarium",
-  "video-fireplace",
+  "video-trailer",
+  "video-combat",
   "video-rain",
   "video-seal",
 ] as const;

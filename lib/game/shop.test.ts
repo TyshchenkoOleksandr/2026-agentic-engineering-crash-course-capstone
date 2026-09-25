@@ -106,15 +106,15 @@ describe("shop: Shop catalog", () => {
       "speed-robot",
       "factory",
       "speed-factory",
+      "video-music",
       "video-runner",
       "video-parkour",
       "video-soap",
       "video-kinetic-sand",
       "video-slime",
       "video-hydraulic",
-      "video-marble",
-      "video-aquarium",
-      "video-fireplace",
+      "video-trailer",
+      "video-combat",
       "video-rain",
       "video-seal",
     ]);
@@ -254,15 +254,15 @@ describe("shop: Shop catalog", () => {
       },
       ...(
         [
+          ["video-music", 2500, 1500],
           ["video-runner", 5000, 3000],
           ["video-parkour", 7500, 4500],
           ["video-soap", 10000, 6000],
           ["video-kinetic-sand", 12500, 7500],
           ["video-slime", 15000, 9000],
           ["video-hydraulic", 20000, 12000],
-          ["video-marble", 25000, 15000],
-          ["video-aquarium", 30000, 18000],
-          ["video-fireplace", 40000, 24000],
+          ["video-trailer", 25000, 15000],
+          ["video-combat", 30000, 18000],
           ["video-rain", 50000, 30000],
           ["video-seal", 60000, 36000],
         ] as const
@@ -411,10 +411,10 @@ describe("shop: Progressive reveal", () => {
     ["video-soap", 6000],
     ["video-kinetic-sand", 7500],
     ["video-slime", 9000],
+    ["video-music", 1500],
     ["video-hydraulic", 12000],
-    ["video-marble", 15000],
-    ["video-aquarium", 18000],
-    ["video-fireplace", 24000],
+    ["video-trailer", 15000],
+    ["video-combat", 18000],
     ["video-rain", 30000],
     ["video-seal", 36000],
   ] as const)("Reveal boundaries for every item: %s at %i", (id, revealAt) => {
@@ -484,9 +484,14 @@ describe("shop: Progressive reveal", () => {
   });
 
   it("Videos are revealed one by one", () => {
-    expect(ids(getRevealedItems(S({ totalClicks: 2999 }), "video"))).toEqual([]);
-    expect(ids(getRevealedItems(S({ totalClicks: 3000 }), "video"))).toEqual(["video-runner"]);
+    expect(ids(getRevealedItems(S({ totalClicks: 1499 }), "video"))).toEqual([]);
+    expect(ids(getRevealedItems(S({ totalClicks: 1500 }), "video"))).toEqual(["video-music"]);
+    expect(ids(getRevealedItems(S({ totalClicks: 3000 }), "video"))).toEqual([
+      "video-music",
+      "video-runner",
+    ]);
     expect(ids(getRevealedItems(S({ totalClicks: 9000 }), "video"))).toEqual([
+      "video-music",
       "video-runner",
       "video-parkour",
       "video-soap",
