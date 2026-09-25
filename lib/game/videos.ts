@@ -21,15 +21,15 @@ export const VIDEO_LOAD_TIMEOUT_MS = 5000;
  * this array.
  */
 export const VIDEO_DECOR: readonly VideoEntry[] = Object.freeze([
+  { id: "video-music", provider: "youtube-nocookie", videoId: "wTRRKguilmY" },
   { id: "video-runner", provider: "youtube-nocookie", videoId: "vTfD20dbxho" },
   { id: "video-parkour", provider: "youtube-nocookie", videoId: "VahKXgW2nXc" },
   { id: "video-soap", provider: "youtube-nocookie", videoId: "ZnC9zqn9rBY" },
   { id: "video-kinetic-sand", provider: "youtube-nocookie", videoId: "f1-2xRx2gnE" },
   { id: "video-slime", provider: "youtube-nocookie", videoId: "-MJi7T4lX80" },
   { id: "video-hydraulic", provider: "youtube-nocookie", videoId: "AKeUssuu3Is" },
-  { id: "video-marble", provider: "youtube-nocookie", videoId: "1cmsiBKoLtE" },
-  { id: "video-aquarium", provider: "youtube-nocookie", videoId: "uJaqnJ6-xfY" },
-  { id: "video-fireplace", provider: "youtube-nocookie", videoId: "1MGlTgSnsE4" },
+  { id: "video-trailer", provider: "youtube-nocookie", videoId: "2VaLOc1FpSo" },
+  { id: "video-combat", provider: "youtube-nocookie", videoId: "nLdRv_N3y00" },
   { id: "video-rain", provider: "youtube-nocookie", videoId: "n_Dv4JMiwK8" },
   { id: "video-seal", provider: "youtube-nocookie", videoId: "h9uFQv3t1AU" },
 ] as const satisfies readonly VideoEntry[]);

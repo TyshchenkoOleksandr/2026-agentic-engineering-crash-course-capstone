@@ -95,18 +95,15 @@ export type DecorId = "sleeping-cat" | "lava-lamp" | "hydraulic-press";
 
 /** Video decor bought in the new `video` category (Stage 4, design D3). */
 export type VideoDecorId =
+  | "video-music"
   | "video-runner"
   | "video-parkour"
   | "video-soap"
   | "video-kinetic-sand"
   | "video-slime"
   | "video-hydraulic"
-  | "video-music"
   | "video-trailer"
   | "video-combat"
-  | "video-marble"
-  | "video-aquarium"
-  | "video-fireplace"
   | "video-rain"
   | "video-seal";
 

@@ -116,15 +116,15 @@ placeholder card, and under reduced motion nothing autoplays.
 
 | Video | Price | Appears at |
 |---|---|---|
+| Expedition music | 2 500 | 1 500 |
 | Subway Surfers | 5 000 | 3 000 |
 | Hydraulic press | 7 500 | 4 500 |
 | Cutting water | 10 000 | 6 000 |
 | Duck on a walk | 12 500 | 7 500 |
 | Witcher meditation | 15 000 | 9 000 |
 | Nature views | 20 000 | 12 000 |
-| Best clips | 25 000 | 15 000 |
-| NFL highlights | 30 000 | 18 000 |
-| Fireplace | 40 000 | 24 000 |
+| Expedition 33 trailer | 25 000 | 15 000 |
+| Expedition 33 combat | 30 000 | 18 000 |
 | Minecraft parkour | 50 000 | 30 000 |
 | Spinning seal | 60 000 | 36 000 |
 

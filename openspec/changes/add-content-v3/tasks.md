@@ -139,5 +139,5 @@ timeout that unmounts the frame).
 
 ## 7. Catalog swap confirmed 2026-09-25 (design D24)
 
-- [ ] 7.1 [human] Red commit `test(add-content-v3): swap three videos for Expedition clips` after the spec update. Catalog tests fail until `VIDEO_DECOR` and prices match D24.
-- [ ] 7.2 Replace Best clips, NFL highlights, and Fireplace with `video-music` (`wTRRKguilmY`, 2500 / 1500), `video-trailer` (`2VaLOc1FpSo`, 25000 / 15000), and `video-combat` (`nLdRv_N3y00`, 30000 / 18000). Drop the three old ids. Do not edit the tests from 7.1.
+- [x] 7.1 [human] Red commit `test(add-content-v3): swap three videos for Expedition clips` after the spec update. Catalog tests fail until `VIDEO_DECOR` and prices match D24. — `4614af7`. The post-commit loop died before a check (pid 71226 gone).
+- [x] 7.2 Replace Best clips, NFL highlights, and Fireplace with `video-music` (`wTRRKguilmY`, 2500 / 1500), `video-trailer` (`2VaLOc1FpSo`, 25000 / 15000), and `video-combat` (`nLdRv_N3y00`, 30000 / 18000). Drop the three old ids. Do not edit the tests from 7.1.

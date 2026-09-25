@@ -25,6 +25,7 @@ export const PRICE_GROWTH = 1.15;
 
 /** Video prices and reveal thresholds, in `VIDEO_DECOR` order (design D4). */
 const VIDEO_PRICES: readonly { readonly price: number; readonly revealAt: number }[] = [
+  { price: 2500, revealAt: 1500 },
   { price: 5000, revealAt: 3000 },
   { price: 7500, revealAt: 4500 },
   { price: 10000, revealAt: 6000 },
@@ -33,7 +34,6 @@ const VIDEO_PRICES: readonly { readonly price: number; readonly revealAt: number
   { price: 20000, revealAt: 12000 },
   { price: 25000, revealAt: 15000 },
   { price: 30000, revealAt: 18000 },
-  { price: 40000, revealAt: 24000 },
   { price: 50000, revealAt: 30000 },
   { price: 60000, revealAt: 36000 },
 ];
